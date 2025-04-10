@@ -29,6 +29,8 @@
       --crit-fail-color: #d16969; /* Muted Red */
       --accent-color: #c586c0; /* Purple accent for rolls */
       --dimmed-roll-color: #777; /* Dim color for discarded adv/dis roll */
+      --button-bg: #333;
+      --button-hover: #444;
     }
     
     html, body {
@@ -69,6 +71,8 @@
       overflow-y: auto; /* Enable scrolling */
       padding: 15px;
       line-height: 1.4;
+      position: relative; /* Add relative positioning */
+      z-index: 1; /* Lower z-index than button */
     }
     
     #output-area > div { /* Style each line */
@@ -170,15 +174,97 @@
     #sound-btn {
       display: none;
     }
+    
+    /* Splash screen styles */
+    #splash-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--terminal-bg);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 1s ease-out;
+    }
+    
+    #splash-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .terminal-icon {
+      font-size: 48px;
+      margin-bottom: 20px;
+      color: var(--prompt-color);
+      animation: blink 1s infinite;
+    }
+    
+    .splash-title {
+      font-size: 32px;
+      color: var(--terminal-text);
+      text-align: center;
+      font-family: 'Consolas', 'Courier New', Courier, monospace;
+      margin-bottom: 20px;
+    }
+    
+    .splash-subtitle {
+      font-size: 16px;
+      color: var(--output-color);
+      text-align: center;
+      font-family: 'Consolas', 'Courier New', Courier, monospace;
+    }
+    
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    
+    #clipboard-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: var(--button-bg);
+      color: var(--terminal-text);
+      border: 1px solid #444;
+      border-radius: 3px;
+      padding: 5px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      z-index: 1000; /* Ensure button is above other elements */
+      pointer-events: auto; /* Ensure button can receive clicks */
+    }
+    
+    #clipboard-btn:hover {
+      background-color: var(--button-hover);
+    }
+    
+    #clipboard-btn.copied {
+      background-color: var(--crit-hit-color);
+      color: black;
+    }
   </style>
 </head>
 <body>
+  <div id="splash-screen">
+    <div class="terminal-icon">_&lt;</div>
+    <div class="splash-title">Terminal Dice Roller</div>
+    <div class="splash-subtitle">Loading...</div>
+  </div>
 
   <div id="terminal-container">
+    <button id="clipboard-btn" title="Copy roll log to clipboard">📋 Copy Log</button>
     <div id="output-area">
       <div>Welcome to the Terminal Dice Roller!</div>
       <div>Supports: <code>xDy+m*f</code>, <code>adY+m</code>, <code>ddY+m</code>, <code>n#xDy+m</code></div>
       <div>Type 'clear' to clear screen. Press Enter to roll.</div>
+      <div>Type 'legend' to see list of possible commands.</div>
       <div>--------------------------------------------------</div>
     </div>
     <div id="input-line">
@@ -203,12 +289,9 @@
     function addOutputLine(htmlContent, type = 'result') {
       const line = document.createElement('div');
       line.classList.add(`${type}-line`);
-      line.innerHTML = htmlContent; // Use innerHTML to render spans correctly
+      line.innerHTML = htmlContent;
       outputArea.appendChild(line);
-      // Scroll to bottom smoothly (optional, modern browsers)
       outputArea.scrollTo({ top: outputArea.scrollHeight, behavior: 'smooth' });
-      // Fallback for older browsers
-      // outputArea.scrollTop = outputArea.scrollHeight;
     }
 
     function showError(message) {
@@ -216,27 +299,224 @@
     }
 
     function playRollSound() {
-       // Basic error check in case the element doesn't exist or fails to load
       if (rollSound && typeof rollSound.play === 'function') {
         rollSound.currentTime = 0;
-        rollSound.play().catch(error => {
-          // Ignore errors often caused by user interaction policies
-          // console.log("Roll sound play prevented:", error);
-        });
+        rollSound.play().catch(error => {});
       }
+    }
+
+    function parseDiceExpression(expr) {
+      // First check for # notation
+      const multipleRollsMatch = expr.match(/^(\d+)#(.+)$/i);
+      if (multipleRollsMatch) {
+        const numRolls = parseInt(multipleRollsMatch[1]);
+        const innerExpr = multipleRollsMatch[2];
+        return { type: 'multiple', count: numRolls, expr: innerExpr };
+      }
+
+      // Check for advantage/disadvantage with modifiers
+      const advDisMatch = expr.match(/^(ad|dd)(\d+)(.*)$/i);
+      if (advDisMatch) {
+        const type = advDisMatch[1].toLowerCase();
+        const sides = parseInt(advDisMatch[2]);
+        const modifiers = advDisMatch[3].trim();
+        return { 
+          type: 'advdis', 
+          adv: type === 'ad', 
+          sides,
+          modifiers: modifiers ? parseDiceExpression(modifiers) : null
+        };
+      }
+
+      // Split the expression into tokens, handling both d and D, percentage dice, and percentage calculations
+      const tokens = expr.match(/(\d+%\d+|\d*[dD][%]|\d*[dD]\d+|[+\-*/]|\d+)/g) || [];
+      const parsed = [];
+      
+      for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+        
+        // Handle percentage calculation (x%y)
+        if (token.includes('%') && !token.includes('d') && !token.includes('D')) {
+          const [percent, value] = token.split('%');
+          parsed.push({ type: 'percent', percent: parseInt(percent), value: parseInt(value) });
+        }
+        // Handle dice notation (both d and D and percentage)
+        else if (token.match(/[dD]/)) {
+          if (token.includes('%')) {
+            const num = token.split(/[dD]/)[0];
+            const count = num ? parseInt(num) : 1;
+            parsed.push({ type: 'dice', count, sides: 100 });
+          } else {
+            const [num, sides] = token.split(/[dD]/);
+            const count = num ? parseInt(num) : 1;
+            parsed.push({ type: 'dice', count, sides: parseInt(sides) });
+          }
+        }
+        // Handle operators
+        else if (['+', '-', '*', '/'].includes(token)) {
+          parsed.push({ type: 'operator', value: token });
+        }
+        // Handle numbers
+        else if (!isNaN(token)) {
+          parsed.push({ type: 'number', value: parseInt(token) });
+        }
+      }
+      
+      return parsed;
+    }
+
+    function evaluateDiceExpression(parsed) {
+      // Handle multiple rolls
+      if (parsed.type === 'multiple') {
+        let results = [];
+        for (let i = 0; i < parsed.count; i++) {
+          const innerParsed = parseDiceExpression(parsed.expr);
+          const { result, output } = evaluateDiceExpression(innerParsed);
+          results.push({ result, output });
+        }
+        return { 
+          result: results.map(r => r.result), 
+          output: results.map((r, i) => `Set ${i + 1}: ${r.output} = <span class="total">${r.result}</span>`).join('<br>')
+        };
+      }
+
+      // Handle advantage/disadvantage
+      if (parsed.type === 'advdis') {
+        const roll1 = rollDie(parsed.sides);
+        const roll2 = rollDie(parsed.sides);
+        const chosen = parsed.adv ? Math.max(roll1, roll2) : Math.min(roll1, roll2);
+        const discarded = parsed.adv ? Math.min(roll1, roll2) : Math.max(roll1, roll2);
+        
+        let critStatus = '';
+        if (parsed.sides === 20) {
+          if (chosen === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
+          if (chosen === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
+        }
+
+        const rollText = `<span class="rolls">[${roll1 === chosen ? 
+          `<strong>${roll1}</strong>` : `<span class="discarded">${roll1}</span>`}, ${
+          roll2 === chosen ? 
+          `<strong>${roll2}</strong>` : `<span class="discarded">${roll2}</span>`}]</span> -> ${chosen}`;
+
+        let result = chosen;
+        let output = `Roll (${parsed.adv ? 'Adv' : 'Dis'}): ${rollText} ${critStatus}`;
+
+        // Handle modifiers if present
+        if (parsed.modifiers) {
+          let currentResult = result;
+          let currentOutput = output;
+          
+          // Process each modifier operation in sequence
+          for (let i = 0; i < parsed.modifiers.length; i++) {
+            if (parsed.modifiers[i].type === 'operator') {
+              const operator = parsed.modifiers[i].value;
+              const nextToken = parsed.modifiers[i + 1];
+              
+              if (nextToken) {
+                let modValue;
+                if (nextToken.type === 'number') {
+                  modValue = nextToken.value;
+                } else if (nextToken.type === 'dice') {
+                  const { result: diceResult } = evaluateDiceExpression([nextToken]);
+                  modValue = diceResult;
+                } else if (nextToken.type === 'percent') {
+                  const { result: percentResult } = evaluateDiceExpression([nextToken]);
+                  modValue = percentResult;
+                }
+                
+                if (operator === '+') currentResult += modValue;
+                else if (operator === '-') currentResult -= modValue;
+                else if (operator === '*') currentResult *= modValue;
+                else if (operator === '/') currentResult = Math.floor(currentResult / modValue);
+                
+                currentOutput += ` ${operator} ${modValue} = ${currentResult}`;
+              }
+            }
+          }
+          
+          result = currentResult;
+          output = currentOutput;
+        }
+
+        return { result, output };
+      }
+
+      // Handle regular expressions
+      let result = 0;
+      let currentOperator = '+';
+      let output = '';
+      
+      for (let i = 0; i < parsed.length; i++) {
+        const token = parsed[i];
+        
+        if (token.type === 'dice') {
+          const rolls = [];
+          let sum = 0;
+          let critStatus = '';
+          
+          for (let j = 0; j < token.count; j++) {
+            const roll = rollDie(token.sides);
+            rolls.push(roll);
+            sum += roll;
+            // Only check for critical hits/fails on d20
+            if (token.sides === 20) {
+              if (roll === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
+              if (roll === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
+            }
+          }
+          
+          const rollText = `<span class="rolls">[${rolls.join(', ')}]</span>`;
+          output += `${rollText} = ${sum} ${critStatus}`;
+          
+          if (currentOperator === '+') result += sum;
+          else if (currentOperator === '-') result -= sum;
+          else if (currentOperator === '*') result *= sum;
+          else if (currentOperator === '/') result = Math.floor(result / sum);
+          
+          if (i < parsed.length - 1 && parsed[i + 1].type === 'operator') {
+            output += ` ${parsed[i + 1].value} `;
+          }
+        }
+        else if (token.type === 'percent') {
+          const percentValue = Math.floor((token.percent / 100) * token.value);
+          output += `${token.percent}% of ${token.value} = ${percentValue}`;
+          
+          if (currentOperator === '+') result += percentValue;
+          else if (currentOperator === '-') result -= percentValue;
+          else if (currentOperator === '*') result *= percentValue;
+          else if (currentOperator === '/') result = Math.floor(result / percentValue);
+          
+          if (i < parsed.length - 1 && parsed[i + 1].type === 'operator') {
+            output += ` ${parsed[i + 1].value} `;
+          }
+        }
+        else if (token.type === 'number') {
+          output += token.value;
+          
+          if (currentOperator === '+') result += token.value;
+          else if (currentOperator === '-') result -= token.value;
+          else if (currentOperator === '*') result *= token.value;
+          else if (currentOperator === '/') result = Math.floor(result / token.value);
+          
+          if (i < parsed.length - 1 && parsed[i + 1].type === 'operator') {
+            output += ` ${parsed[i + 1].value} `;
+          }
+        }
+        else if (token.type === 'operator') {
+          currentOperator = token.value;
+        }
+      }
+      
+      return { result, output };
     }
 
     function processInput() {
       const inputText = diceInput.value.trim();
-      const inputUpper = inputText.toUpperCase(); // Use uppercase for matching
-
+      
       if (inputText) {
-        // Sanitize input slightly before echoing to prevent basic HTML injection if tags weren't intended
-        const sanitizedInput = inputText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        addOutputLine(sanitizedInput, 'command-echo');
+        addOutputLine(inputText, 'command-echo');
       } else {
-        // Don't process empty input
-        diceInput.value = ''; // Clear just in case
+        diceInput.value = '';
         return;
       }
 
@@ -246,295 +526,110 @@
         return;
       }
 
-      // --- Regex Definitions ---
-      // Updated to include optional factor (* or /) for # rolls
-      const individualRollRegex = /^\s*(\d+)#(\d*)D(\d+)\s*([+\-]\s*\d+)?\s*([*\/]\s*\d+)?\s*$/;
-      // Standard roll regex remains the same
-      const standardRollRegex = /^\s*(?:(\d*)?(AD|DD)D?(\d+)|(\d*)D(\d+))\s*([+\-]\s*\d+)?\s*([*\/]\s*\d+)?\s*$/;
-
-      let match;
-
-      // --- Try Matching Individual Rolls (n#...) ---
-      // THIS SECTION HAS BEEN MODIFIED
-      if ((match = inputUpper.match(individualRollRegex))) {
-        const numRolls = parseInt(match[1], 10);
-        const numDice = match[2] ? parseInt(match[2], 10) : 1;
-        const diceSides = parseInt(match[3], 10);
-        const modifierString = match[4] ? match[4].replace(/\s/g, '') : null;
-        const factorString = match[5] ? match[5].replace(/\s/g, '') : null; // New: Capture factor
-
-        const modifierValue = modifierString ? parseInt(modifierString, 10) : 0;
-        let factorValue = 1, factorOperator = ''; // New: Parse factor
-
-        if (factorString) {
-          factorOperator = factorString.charAt(0);
-          factorValue = parseInt(factorString.substring(1), 10);
-        }
-
-        // --- Validation ---
-        if (isNaN(numRolls) || isNaN(numDice) || isNaN(diceSides) || diceSides < 1 || numDice < 1 || numRolls < 1) {
-          showError(`Invalid numbers in individual roll notation: <code>${inputText}</code>`);
-          diceInput.value = '';
-          return;
-        }
-         if (isNaN(modifierValue)) {
-             showError(`Invalid modifier number: <code>${inputText}</code>`);
-             diceInput.value = '';
-             return;
-         }
-        if (factorString && isNaN(factorValue)) { // New: Validate factor value
-          showError(`Invalid factor number: <code>${inputText}</code>`);
-          diceInput.value = '';
-          return;
-        }
-        if (factorOperator === '/' && factorValue === 0) { // New: Validate division by zero
-          showError("Division by zero is not allowed.");
-          diceInput.value = '';
-          return;
-        }
-        // --- End Validation ---
-
-
-        let notationString = `${numDice}d${diceSides}${modifierString || ''}${factorString || ''}`; // New: Include factor in notation display
-        addOutputLine(`Rolling ${numRolls} sets of <code>${notationString}</code>...`);
-        playRollSound(); // Play sound once for the batch
-        let resultsListHTML = '';
-
-        for (let i = 0; i < numRolls; i++) {
-          let currentRollSum = 0;
-          const rolls = [];
-          let critStatus = '';
-
-          for (let j = 0; j < numDice; j++) {
-            const roll = rollDie(diceSides);
-            rolls.push(roll);
-            currentRollSum += roll;
-            // Crit status applies if rolling a single d20 within the set
-            if (numDice === 1 && diceSides === 20) {
-              if (roll === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
-              if (roll === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
-            }
-          }
-
-          const resultAfterModifier = currentRollSum + modifierValue;
-          let finalValue = resultAfterModifier; // Initialize final value
-
-          // New: Apply the factor to each set's result
-          if (factorOperator === '*') {
-            finalValue = resultAfterModifier * factorValue;
-          } else if (factorOperator === '/') {
-            finalValue = Math.floor(resultAfterModifier / factorValue); // Use floor division
-          }
-
-          // Construct the output string for this set, showing steps
-          let setOutput = `Set ${i + 1}: <span class="rolls">[${rolls.join(', ')}]</span>`;
-          if (numDice === 1 && critStatus) {
-              setOutput += ` ${critStatus}`; // Show crit right after single roll
-          }
-          if (numDice > 1) {
-              setOutput += ` = ${currentRollSum}`; // Show sum if multiple dice per set
-          }
-          if (modifierString) {
-              setOutput += ` ${modifierString.startsWith('-') ? '-' : '+'} ${Math.abs(modifierValue)} = ${resultAfterModifier}`; // Show modifier step
-          }
-          // Handle edge case: crit on d20+0*2 - need intermediate step shown
-          else if (numDice === 1 && critStatus && factorString) {
-               setOutput += ` (= ${resultAfterModifier})`;
-          }
-
-          if (factorString) {
-              setOutput += ` ${factorOperator} ${factorValue} = <span class="total">${finalValue}</span>`; // Show factor step and final total
-          } else {
-              // If no factor, the result after modifier is the final total.
-              // Show '= total' only if there were intermediate steps (sum, modifier, crit)
-              if (modifierString || numDice > 1 || critStatus) {
-                   setOutput += ` = <span class="total">${finalValue}</span>`;
-              } else if (numDice === 1) {
-                 // Simple 1dY roll per set, no modifier/factor/crit
-                 setOutput += ` => <span class="total">${finalValue}</span>`; // Just show the result as total
-              }
-          }
-
-          resultsListHTML += setOutput + '<br>'; // Add line break for HTML output
-        }
-        addOutputLine(resultsListHTML.trimEnd()); // Add the combined results
-
-      // --- Try Matching Standard Rolls (including advantage/disadvantage) ---
-      // THIS SECTION REMAINS LARGELY THE SAME
-      } else if ((match = inputUpper.match(standardRollRegex))) {
-        let numDice, diceSides, advDisMarker;
-        if (match[2]) { // Adv/Dis match
-          numDice = match[1] ? parseInt(match[1], 10) : 1; // Should always be 1 here ideally
-          advDisMarker = match[2];
-          diceSides = parseInt(match[3], 10);
-          if (numDice > 1) { // Technically redundant due to regex structure, but safe check
-             showError(`Advantage/Disadvantage (ad/dd) must use a single die (e.g., ad20, dd20+5). Input: <code>${inputText}</code>`);
-             diceInput.value = '';
-             return;
-           }
-        } else { // Standard D match
-          numDice = match[4] ? parseInt(match[4], 10) : 1;
-          diceSides = parseInt(match[5], 10);
-        }
-        const modifierString = match[6] ? match[6].replace(/\s/g, '') : null;
-        const factorString = match[7] ? match[7].replace(/\s/g, '') : null;
-
-        const modifierValue = modifierString ? parseInt(modifierString, 10) : 0;
-        let factorValue = 1, factorOperator = '';
-        if (factorString) {
-          factorOperator = factorString.charAt(0);
-          factorValue = parseInt(factorString.substring(1), 10);
-        }
-
-        // --- Validation ---
-        if (isNaN(numDice) || isNaN(diceSides) || diceSides < 1 || numDice < 1) {
-          showError(`Invalid numbers in roll notation: <code>${inputText}</code>`);
-          diceInput.value = '';
-          return;
-        }
-         if (isNaN(modifierValue)) {
-            showError(`Invalid modifier number: <code>${inputText}</code>`);
-            diceInput.value = '';
-            return;
-         }
-        if (factorString && isNaN(factorValue)) {
-          showError(`Invalid factor number: <code>${inputText}</code>`);
-          diceInput.value = '';
-          return;
-        }
-        if (factorOperator === '/' && factorValue === 0) {
-          showError("Division by zero is not allowed.");
-          diceInput.value = '';
-          return;
-        }
-        // --- End Validation ---
-
-        let totalSum = 0;
-        const rolls = [];
-        let critStatus = '';
-        let displayRolls = '', resultTextStart = '';
-
-        playRollSound(); // Play sound once per command
-
-        if (advDisMarker) { // Advantage/Disadvantage roll
-          const roll1 = rollDie(diceSides);
-          const roll2 = rollDie(diceSides);
-          let chosenRoll, rollType = '';
-          let discardedRoll;
-
-          if (advDisMarker === 'AD') {
-            chosenRoll = Math.max(roll1, roll2);
-            discardedRoll = Math.min(roll1, roll2);
-            rollType = 'Adv';
-          } else { // DD case
-            chosenRoll = Math.min(roll1, roll2);
-            discardedRoll = Math.max(roll1, roll2);
-            rollType = 'Dis';
-          }
-          // Style the rolls to show which was chosen/discarded
-          let r1_style = (roll1 === chosenRoll) ? `<strong>${roll1}</strong>` : `<span class="discarded">${roll1}</span>`;
-          let r2_style = (roll2 === chosenRoll) ? `<strong>${roll2}</strong>` : `<span class="discarded">${roll2}</span>`;
-          // Ensure consistent order for display (e.g., lower first)
-          displayRolls = `<span class="rolls">[${Math.min(roll1, roll2) === roll1 ? r1_style : r2_style}, ${Math.max(roll1, roll2) === roll1 ? r1_style : r2_style}]</span> -> ${chosenRoll}`;
-
-          totalSum = chosenRoll;
-          if (diceSides === 20) {
-            if (chosenRoll === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
-            if (chosenRoll === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
-          }
-          resultTextStart = `Roll (${rollType}): ${displayRolls} ${critStatus}`;
-
-        } else { // Standard roll without AD/DD
-          for (let i = 0; i < numDice; i++) {
-            const roll = rollDie(diceSides);
-            rolls.push(roll);
-            totalSum += roll;
-            // Crit status only relevant for single d20 rolls
-            if (numDice === 1 && diceSides === 20) {
-              if (roll === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
-              if (roll === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
-            }
-          }
-          displayRolls = `<span class="rolls">[${rolls.join(', ')}]</span>`;
-          resultTextStart = `Rolls: ${displayRolls} ${critStatus}`;
-           // Show intermediate sum only if multiple dice were rolled
-          if (numDice > 1) {
-             resultTextStart += ` = ${totalSum}`;
-          }
-        }
-
-        let resultAfterModifier = totalSum + modifierValue;
-        let finalResult = resultAfterModifier; // Initialize final result
-
-        // Apply factor AFTER modifier
-        if (factorOperator === '*') {
-          finalResult = resultAfterModifier * factorValue;
-        } else if (factorOperator === '/') {
-          finalResult = Math.floor(resultAfterModifier / factorValue); // Use floor division
-        }
-
-        // Construct the full result text, showing steps
-        let resultText = resultTextStart;
-        if (modifierString) {
-          // Append modifier step only if it wasn't implicitly part of the start (like single die roll)
-          if (numDice > 1 || advDisMarker || (numDice === 1 && !critStatus)){ // Show step if sum shown, or adv/dis, or simple 1dY
-             resultText += ` ${modifierString.startsWith('-') ? '-' : '+'} ${Math.abs(modifierValue)} = ${resultAfterModifier}`;
-          } else if (numDice === 1 && critStatus) { // Handle crit d20+mod
-             resultText += ` ${modifierString.startsWith('-') ? '-' : '+'} ${Math.abs(modifierValue)} = ${resultAfterModifier}`;
-          } else { // Single die roll without crit, resultAfterModifier is the base for factor
-             // Don't show intermediate step if only modifier applied, unless factor follows
-              if (!factorString) { // If no factor, this is the end result
-                  resultText = `Result: <span class="rolls">[${totalSum}]</span> ${modifierString.startsWith('-') ? '-' : '+'} ${Math.abs(modifierValue)} = <span class="total">${finalResult}</span>`;
-              } else { // Factor follows, show step
-                  resultText += ` ${modifierString.startsWith('-') ? '-' : '+'} ${Math.abs(modifierValue)} = ${resultAfterModifier}`;
-              }
-          }
-        }
-        if (factorString) {
-          resultText += ` ${factorOperator} ${factorValue} = <span class="total">${finalResult}</span>`; // Append factor step and final total
-        } else if (modifierString) {
-           // If only modifier was applied, and intermediate step was shown, add final total span
-           // This case is mostly handled above or factorString exists. Add span if it wasn't added yet.
-           if (!resultText.includes('<span class="total">')) {
-               resultText += ` = <span class="total">${finalResult}</span>`;
-           }
-        } else {
-          // No modifier, no factor. Show total only if intermediate steps shown (adv/dis, multi-dice, crit)
-          if (advDisMarker || numDice > 1 || critStatus) {
-            resultText += ` = <span class="total">${finalResult}</span>`;
-          } else if (numDice === 1) {
-             // Simple 1dY result, no steps needed, resultTextStart already shows roll
-             resultText = `Result: ${displayRolls} => <span class="total">${finalResult}</span>`;
-          }
-        }
-
-        addOutputLine(resultText);
-      } else {
-        // If neither regex matches
-        showError(`Invalid command or dice notation: <code>${inputText}</code>`);
+      if (inputText.toLowerCase() === 'legend') {
+        const legendText = `
+<div>--------------------------------------------------</div>
+<div><strong>Dice Roll Commands:</strong></div>
+<div>--------------------------------------------------</div>
+<div><code>xDy</code> - Roll x dice with y sides (e.g., 3d6)</div>
+<div><code>d%</code> or <code>d100</code> - Roll a percentage die (1-100)</div>
+<div><code>x%y</code> - Calculate x percent of y (e.g., 50%20 = 10)</div>
+<div><code>xDy + m</code> - Roll x dice with y sides and add m (e.g., 2d20 + 5)</div>
+<div><code>xDy * f</code> - Roll x dice with y sides and multiply by f (e.g., 1d6 * 2)</div>
+<div><code>xDy / f</code> - Roll x dice with y sides and divide by f (e.g., 1d20 / 2)</div>
+<div><code>n#xDy</code> - Roll n sets of x dice with y sides (e.g., 5#2d6)</div>
+<div><code>adY</code> - Roll with advantage (e.g., ad20)</div>
+<div><code>ddY</code> - Roll with disadvantage (e.g., dd20)</div>
+<div><code>adY + m</code> - Roll with advantage and add m (e.g., ad20 + 5)</div>
+<div><code>ddY * f</code> - Roll with disadvantage and multiply by f (e.g., dd20 * 2)</div>
+<div>--------------------------------------------------</div>
+<div><strong>Examples:</strong></div>
+<div>--------------------------------------------------</div>
+<div><code>3d6 + 2</code> - Roll 3 six-sided dice and add 2</div>
+<div><code>d%</code> - Roll a percentage die (1-100)</div>
+<div><code>2d% + 10</code> - Roll 2 percentage dice and add 10</div>
+<div><code>50%20</code> - Calculate 50% of 20 (result: 10)</div>
+<div><code>100%20 + 2</code> - Calculate 100% of 20 and add 2 (result: 22)</div>
+<div><code>1d20 + 5 * 2</code> - Roll 1d20, add 5, then multiply by 2</div>
+<div><code>5#2d6 + 3</code> - Roll 5 sets of 2d6+3</div>
+<div><code>ad20 + 5</code> - Roll d20 with advantage and add 5</div>
+<div><code>dd20 * 2</code> - Roll d20 with disadvantage and multiply by 2</div>
+<div>--------------------------------------------------</div>
+<div>Type 'clear' to clear the screen</div>
+<div>--------------------------------------------------</div>
+`;
+        addOutputLine(legendText);
+        diceInput.value = '';
+        return;
       }
 
-      diceInput.value = ''; // Clear input field after processing
-      diceInput.focus(); // Keep focus on input
+      try {
+        const parsed = parseDiceExpression(inputText);
+        if (parsed.length === 0 && !parsed.type) {
+          throw new Error('Invalid dice expression');
+        }
+        
+        playRollSound();
+        const { result, output } = evaluateDiceExpression(parsed);
+        
+        if (Array.isArray(result)) {
+          // Handle multiple roll results
+          addOutputLine(output);
+        } else {
+          addOutputLine(`${output} = <span class="total">${result}</span>`);
+        }
+      } catch (error) {
+        showError(`Invalid dice expression: <code>${inputText}</code>`);
+      }
+
+      diceInput.value = '';
+      diceInput.focus();
     }
 
     // --- Event Listeners ---
     diceInput.addEventListener('keydown', function(event) {
       if (event.key === 'Enter') {
-        event.preventDefault(); // Prevent default form submission (if applicable)
+        event.preventDefault();
         processInput();
       }
-      // Add Up Arrow for history (Optional - requires storing history)
-      // if (event.key === 'ArrowUp') { /* Retrieve last command */ }
     });
 
-    // Refocus input if user clicks in the terminal area
     outputArea.addEventListener('click', () => diceInput.focus());
     document.getElementById('input-line').addEventListener('click', () => diceInput.focus());
-
-    // Initial focus on input when page loads
     diceInput.focus();
 
+    // Add clipboard functionality
+    const clipboardBtn = document.getElementById('clipboard-btn');
+    
+    clipboardBtn.addEventListener('click', function() {
+      const outputText = outputArea.innerText;
+      navigator.clipboard.writeText(outputText).then(() => {
+        // Show feedback
+        const originalText = clipboardBtn.textContent;
+        clipboardBtn.textContent = '✓ Copied!';
+        clipboardBtn.classList.add('copied');
+        
+        // Reset button after 2 seconds
+        setTimeout(() => {
+          clipboardBtn.textContent = originalText;
+          clipboardBtn.classList.remove('copied');
+        }, 2000);
+      }).catch(err => {
+        console.error('Failed to copy text: ', err);
+      });
+    });
+
+    // Splash screen functionality
+    const splashScreen = document.getElementById('splash-screen');
+    
+    // Hide splash screen after 2 seconds
+    setTimeout(() => {
+      splashScreen.classList.add('hidden');
+      // Remove splash screen from DOM after fade out
+      setTimeout(() => {
+        splashScreen.remove();
+      }, 1000);
+    }, 2000);
   </script>
 </body>
 </html>
