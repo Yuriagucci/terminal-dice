@@ -3,265 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    style-src 'self' 'unsafe-inline';
-    script-src 'self' 'unsafe-inline';
-    font-src 'self';
-    object-src 'none';
-    base-uri 'self';
-    form-action 'none';
-  ">
   
   <link rel="icon" type="image/png" href="icon.ico">
   
-  <title>Terminal Dice Roller</title>
+  <title>Dice Terminal</title>
   
-  <style>
-    :root {
-      --terminal-bg: #1e1e1e;
-      --terminal-text: #d4d4d4;
-      --prompt-color: #569cd6;
-      --input-color: #ce9178;
-      --output-color: #b5cea8;
-      --error-color: #f44747;
-      --crit-hit-color: #4ec9b0; /* Bright Teal */
-      --crit-fail-color: #d16969; /* Muted Red */
-      --accent-color: #c586c0; /* Purple accent for rolls */
-      --dimmed-roll-color: #777; /* Dim color for discarded adv/dis roll */
-      --button-bg: #333;
-      --button-hover: #444;
-    }
-    
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-    }
-    
-    body {
-      font-family: 'Consolas', 'Courier New', Courier, monospace;
-      background-color: var(--terminal-bg);
-      color: var(--terminal-text);
-      font-size: 16px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 15px;
-      box-sizing: border-box;
-    }
-    
-    #terminal-container {
-      width: 100%;
-      max-width: 800px; /* Max width for readability */
-      height: 80vh; /* Height constraint */
-      max-height: 700px; /* Max height */
-      background-color: var(--terminal-bg);
-      border: 1px solid #333;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-      border-radius: 6px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden; /* Contain children */
-      position: relative;
-    }
-    
-    #output-area {
-      flex-grow: 1; /* Takes up available space */
-      overflow-y: auto; /* Enable scrolling */
-      padding: 15px;
-      line-height: 1.4;
-      position: relative; /* Add relative positioning */
-      z-index: 1; /* Lower z-index than button */
-    }
-    
-    #output-area > div { /* Style each line */
-      margin-bottom: 5px;
-      white-space: pre-wrap; /* Wrap text like a terminal */
-      word-wrap: break-word;
-      opacity: 0;
-      animation: fadeIn 0.5s forwards;
-    }
-    
-    .command-echo {
-      color: var(--prompt-color);
-    }
-    .command-echo::before {
-      content: "> ";
-    }
-    
-    .result-line {
-      color: var(--output-color);
-    }
-    .error-line {
-      color: var(--error-color);
-    }
-    
-    /* Specific styling within results */
-    .result-line code, .error-line code { /* Dice notation */
-      color: var(--input-color);
-      background-color: rgba(255, 255, 255, 0.05);
-      padding: 1px 4px;
-      border-radius: 3px;
-      font-weight: bold;
-    }
-    .result-line .rolls { /* Individual rolls / Adv/Dis rolls */
-      color: var(--accent-color);
-    }
-    .result-line .rolls .discarded { /* Dim discarded adv/dis roll */
-      color: var(--dimmed-roll-color);
-      text-decoration: line-through;
-    }
-    .result-line .total { /* Final total */
-      font-weight: bold;
-      color: white;
-    }
-    
-    /* Crit/Fail Styling */
-    .crit-hit, .crit-fail {
-      font-weight: bold;
-      display: inline-block; /* Allows padding */
-      padding: 0 5px;
-      border-radius: 3px;
-      margin-left: 5px; /* Space from roll */
-    }
-    .crit-hit {
-      color: black;
-      background-color: var(--crit-hit-color);
-    }
-    .crit-fail {
-      color: black;
-      background-color: var(--crit-fail-color);
-    }
-    
-    #input-line {
-      display: flex;
-      align-items: center;
-      padding: 5px 15px 10px 15px;
-      border-top: 1px solid #333;
-    }
-    
-    #input-prompt {
-      color: var(--prompt-color);
-      margin-right: 8px;
-      font-weight: bold;
-    }
-    
-    #dice-input {
-      flex-grow: 1;
-      background-color: transparent;
-      border: none;
-      outline: none;
-      color: var(--input-color);
-      font-family: inherit;
-      font-size: inherit;
-      caret-color: var(--terminal-text); /* Blinking cursor color */
-    }
-    
-    /* Custom scrollbar for terminal look */
-    #output-area::-webkit-scrollbar { width: 8px; }
-    #output-area::-webkit-scrollbar-track { background: #2a2a2a; border-radius: 4px; }
-    #output-area::-webkit-scrollbar-thumb { background-color: #555; border-radius: 4px; border: 2px solid #2a2a2a; }
-    #output-area::-webkit-scrollbar-thumb:hover { background-color: #777; }
-    
-    /* Animation for new output lines */
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    
-    /* Sound effect button (invisible) */
-    #sound-btn {
-      display: none;
-    }
-    
-    /* Splash screen styles */
-    #splash-screen {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: var(--terminal-bg);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 9999;
-      opacity: 1;
-      transition: opacity 1s ease-out;
-    }
-    
-    #splash-screen.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-    
-    .terminal-icon {
-      font-size: 48px;
-      margin-bottom: 20px;
-      color: var(--prompt-color);
-      animation: blink 1s infinite;
-    }
-    
-    .splash-title {
-      font-size: 32px;
-      color: var(--terminal-text);
-      text-align: center;
-      font-family: 'Consolas', 'Courier New', Courier, monospace;
-      margin-bottom: 20px;
-    }
-    
-    .splash-subtitle {
-      font-size: 16px;
-      color: var(--output-color);
-      text-align: center;
-      font-family: 'Consolas', 'Courier New', Courier, monospace;
-    }
-    
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0; }
-    }
-    
-    #clipboard-btn {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background-color: var(--button-bg);
-      color: var(--terminal-text);
-      border: 1px solid #444;
-      border-radius: 3px;
-      padding: 5px 10px;
-      font-family: inherit;
-      font-size: 12px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-      z-index: 1000; /* Ensure button is above other elements */
-      pointer-events: auto; /* Ensure button can receive clicks */
-    }
-    
-    #clipboard-btn:hover {
-      background-color: var(--button-hover);
-    }
-    
-    #clipboard-btn.copied {
-      background-color: var(--crit-hit-color);
-      color: black;
-    }
-  </style>
+  <link rel="stylesheet" href="main.css">
+
 </head>
 <body>
   <div id="splash-screen">
     <div class="terminal-icon">_&lt;</div>
-    <div class="splash-title">Terminal Dice Roller</div>
+    <div class="splash-title">Dice Terminal</div>
     <div class="splash-subtitle">Loading...</div>
   </div>
 
   <div id="terminal-container">
     <button id="clipboard-btn" title="Copy roll log to clipboard">📋 Copy Log</button>
     <div id="output-area">
-      <div>Welcome to the Terminal Dice Roller!</div>
+      <div>Welcome to the Dice Terminal!</div>
       <div>Supports: <code>xDy+m*f</code>, <code>adY+m</code>, <code>ddY+m</code>, <code>n#xDy+m</code></div>
       <div>Type 'clear' to clear screen. Press Enter to roll.</div>
       <div>Type 'legend' to see list of possible commands.</div>
@@ -269,22 +29,15 @@
     </div>
     <div id="input-line">
       <span id="input-prompt">&gt;</span>
-      <input type="text" id="dice-input" autofocus autocomplete="off">
+      <input type="text" id="dice-input" placeholder="Enter" autofocus autocomplete="off">
     </div>
   </div>
 
-  <!-- Audio element for roll sound -->
-  <audio id="roll-sound" src="roll.mp3" preload="auto"></audio>
-  
-  <script>
+
+  <script> //inputs
     const diceInput = document.getElementById('dice-input');
     const outputArea = document.getElementById('output-area');
     const rollSound = document.getElementById('roll-sound');
-
-    function rollDie(sides) {
-      if (sides < 1) return 1; // Treat invalid dice sides as 1
-      return Math.floor(Math.random() * sides) + 1;
-    }
 
     function addOutputLine(htmlContent, type = 'result') {
       const line = document.createElement('div');
@@ -297,91 +50,98 @@
     function showError(message) {
       addOutputLine(message, 'error');
     }
+  </script>
+  <script> //diceUtils
+    function rollDie(sides) {
+    if (sides < 1) return 1; // Treat invalid dice sides as 1
+    return Math.floor(Math.random() * sides) + 1;
+    }
+
 
     function playRollSound() {
-      if (rollSound && typeof rollSound.play === 'function') {
+    if (rollSound && typeof rollSound.play === 'function') {
         rollSound.currentTime = 0;
         rollSound.play().catch(error => {});
-      }
+    }
     }
 
     function parseDiceExpression(expr) {
-      // First check for # notation
-      const multipleRollsMatch = expr.match(/^(\d+)#(.+)$/i);
-      if (multipleRollsMatch) {
+    // First check for # notation
+    const multipleRollsMatch = expr.match(/^(\d+)#(.+)$/i);
+    if (multipleRollsMatch) {
         const numRolls = parseInt(multipleRollsMatch[1]);
         const innerExpr = multipleRollsMatch[2];
         return { type: 'multiple', count: numRolls, expr: innerExpr };
-      }
+    }
 
-      // Check for advantage/disadvantage with modifiers
-      const advDisMatch = expr.match(/^(ad|dd)(\d+)(.*)$/i);
-      if (advDisMatch) {
+    // Check for advantage/disadvantage with modifiers
+    const advDisMatch = expr.match(/^(ad|dd)(\d+)(.*)$/i);
+    if (advDisMatch) {
         const type = advDisMatch[1].toLowerCase();
         const sides = parseInt(advDisMatch[2]);
         const modifiers = advDisMatch[3].trim();
         return { 
-          type: 'advdis', 
-          adv: type === 'ad', 
-          sides,
-          modifiers: modifiers ? parseDiceExpression(modifiers) : null
+        type: 'advdis', 
+        adv: type === 'ad', 
+        sides,
+        modifiers: modifiers ? parseDiceExpression(modifiers) : null
         };
-      }
+    }
 
-      // Split the expression into tokens, handling both d and D, percentage dice, and percentage calculations
-      const tokens = expr.match(/(\d+%\d+|\d*[dD][%]|\d*[dD]\d+|[+\-*/]|\d+)/g) || [];
-      const parsed = [];
-      
-      for (let i = 0; i < tokens.length; i++) {
+    // Split the expression into tokens, handling both d and D, percentage dice, and percentage calculations
+    const tokens = expr.match(/(\d+%\d+|\d*[dD][%]|\d*[dD]\d+|[+\-*/]|\d+)/g) || [];
+    const parsed = [];
+
+    for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
         
         // Handle percentage calculation (x%y)
         if (token.includes('%') && !token.includes('d') && !token.includes('D')) {
-          const [percent, value] = token.split('%');
-          parsed.push({ type: 'percent', percent: parseInt(percent), value: parseInt(value) });
+        const [percent, value] = token.split('%');
+        parsed.push({ type: 'percent', percent: parseInt(percent), value: parseInt(value) });
         }
         // Handle dice notation (both d and D and percentage)
         else if (token.match(/[dD]/)) {
-          if (token.includes('%')) {
+        if (token.includes('%')) {
             const num = token.split(/[dD]/)[0];
             const count = num ? parseInt(num) : 1;
             parsed.push({ type: 'dice', count, sides: 100 });
-          } else {
+        } else {
             const [num, sides] = token.split(/[dD]/);
             const count = num ? parseInt(num) : 1;
             parsed.push({ type: 'dice', count, sides: parseInt(sides) });
-          }
+        }
         }
         // Handle operators
         else if (['+', '-', '*', '/'].includes(token)) {
-          parsed.push({ type: 'operator', value: token });
+        parsed.push({ type: 'operator', value: token });
         }
         // Handle numbers
         else if (!isNaN(token)) {
-          parsed.push({ type: 'number', value: parseInt(token) });
+        parsed.push({ type: 'number', value: parseInt(token) });
         }
-      }
-      
-      return parsed;
+    }
+
+    return parsed;
     }
 
     function evaluateDiceExpression(parsed) {
-      // Handle multiple rolls
-      if (parsed.type === 'multiple') {
+    // Handle multiple rolls
+    if (parsed.type === 'multiple') {
         let results = [];
         for (let i = 0; i < parsed.count; i++) {
-          const innerParsed = parseDiceExpression(parsed.expr);
-          const { result, output } = evaluateDiceExpression(innerParsed);
-          results.push({ result, output });
+        const innerParsed = parseDiceExpression(parsed.expr);
+        const { result, output } = evaluateDiceExpression(innerParsed);
+        results.push({ result, output });
         }
         return { 
-          result: results.map(r => r.result), 
-          output: results.map((r, i) => `Set ${i + 1}: ${r.output} = <span class="total">${r.result}</span>`).join('<br>')
+        result: results.map(r => r.result), 
+        output: results.map((r, i) => `Set ${i + 1}: ${r.output} = <span class="total">${r.result}</span>`).join('<br>')
         };
-      }
+    }
 
-      // Handle advantage/disadvantage
-      if (parsed.type === 'advdis') {
+    // Handle advantage/disadvantage
+    if (parsed.type === 'advdis') {
         const roll1 = rollDie(parsed.sides);
         const roll2 = rollDie(parsed.sides);
         const chosen = parsed.adv ? Math.max(roll1, roll2) : Math.min(roll1, roll2);
@@ -389,39 +149,39 @@
         
         let critStatus = '';
         if (parsed.sides === 20) {
-          if (chosen === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
-          if (chosen === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
+        if (chosen === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
+        if (chosen === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
         }
 
         const rollText = `<span class="rolls">[${roll1 === chosen ? 
-          `<strong>${roll1}</strong>` : `<span class="discarded">${roll1}</span>`}, ${
-          roll2 === chosen ? 
-          `<strong>${roll2}</strong>` : `<span class="discarded">${roll2}</span>`}]</span> -> ${chosen}`;
+        `<strong>${roll1}</strong>` : `<span class="discarded">${roll1}</span>`}, ${
+        roll2 === chosen ? 
+        `<strong>${roll2}</strong>` : `<span class="discarded">${roll2}</span>`}]</span> -> ${chosen}`;
 
         let result = chosen;
         let output = `Roll (${parsed.adv ? 'Adv' : 'Dis'}): ${rollText} ${critStatus}`;
 
         // Handle modifiers if present
         if (parsed.modifiers) {
-          let currentResult = result;
-          let currentOutput = output;
-          
-          // Process each modifier operation in sequence
-          for (let i = 0; i < parsed.modifiers.length; i++) {
+        let currentResult = result;
+        let currentOutput = output;
+        
+        // Process each modifier operation in sequence
+        for (let i = 0; i < parsed.modifiers.length; i++) {
             if (parsed.modifiers[i].type === 'operator') {
-              const operator = parsed.modifiers[i].value;
-              const nextToken = parsed.modifiers[i + 1];
-              
-              if (nextToken) {
+            const operator = parsed.modifiers[i].value;
+            const nextToken = parsed.modifiers[i + 1];
+            
+            if (nextToken) {
                 let modValue;
                 if (nextToken.type === 'number') {
-                  modValue = nextToken.value;
+                modValue = nextToken.value;
                 } else if (nextToken.type === 'dice') {
-                  const { result: diceResult } = evaluateDiceExpression([nextToken]);
-                  modValue = diceResult;
+                const { result: diceResult } = evaluateDiceExpression([nextToken]);
+                modValue = diceResult;
                 } else if (nextToken.type === 'percent') {
-                  const { result: percentResult } = evaluateDiceExpression([nextToken]);
-                  modValue = percentResult;
+                const { result: percentResult } = evaluateDiceExpression([nextToken]);
+                modValue = percentResult;
                 }
                 
                 if (operator === '+') currentResult += modValue;
@@ -430,92 +190,370 @@
                 else if (operator === '/') currentResult = Math.floor(currentResult / modValue);
                 
                 currentOutput += ` ${operator} ${modValue} = ${currentResult}`;
-              }
             }
-          }
-          
-          result = currentResult;
-          output = currentOutput;
+            }
+        }
+        
+        result = currentResult;
+        output = currentOutput;
         }
 
         return { result, output };
-      }
+    }
 
-      // Handle regular expressions
-      let result = 0;
-      let currentOperator = '+';
-      let output = '';
-      
-      for (let i = 0; i < parsed.length; i++) {
+    // Handle regular expressions
+    let result = 0;
+    let currentOperator = '+';
+    let output = '';
+
+    for (let i = 0; i < parsed.length; i++) {
         const token = parsed[i];
         
         if (token.type === 'dice') {
-          const rolls = [];
-          let sum = 0;
-          let critStatus = '';
-          
-          for (let j = 0; j < token.count; j++) {
+        const rolls = [];
+        let sum = 0;
+        let critStatus = '';
+        
+        for (let j = 0; j < token.count; j++) {
             const roll = rollDie(token.sides);
             rolls.push(roll);
             sum += roll;
             // Only check for critical hits/fails on d20
             if (token.sides === 20) {
-              if (roll === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
-              if (roll === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
+            if (roll === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
+            if (roll === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
             }
-          }
-          
-          const rollText = `<span class="rolls">[${rolls.join(', ')}]</span>`;
-          output += `${rollText} = ${sum} ${critStatus}`;
-          
-          if (currentOperator === '+') result += sum;
-          else if (currentOperator === '-') result -= sum;
-          else if (currentOperator === '*') result *= sum;
-          else if (currentOperator === '/') result = Math.floor(result / sum);
-          
-          if (i < parsed.length - 1 && parsed[i + 1].type === 'operator') {
+        }
+        
+        const rollText = `<span class="rolls">[${rolls.join(', ')}]</span>`;
+        output += `${rollText} = ${sum} ${critStatus}`;
+        
+        if (currentOperator === '+') result += sum;
+        else if (currentOperator === '-') result -= sum;
+        else if (currentOperator === '*') result *= sum;
+        else if (currentOperator === '/') result = Math.floor(result / sum);
+        
+        if (i < parsed.length - 1 && parsed[i + 1].type === 'operator') {
             output += ` ${parsed[i + 1].value} `;
-          }
+        }
         }
         else if (token.type === 'percent') {
-          const percentValue = Math.floor((token.percent / 100) * token.value);
-          output += `${token.percent}% of ${token.value} = ${percentValue}`;
-          
-          if (currentOperator === '+') result += percentValue;
-          else if (currentOperator === '-') result -= percentValue;
-          else if (currentOperator === '*') result *= percentValue;
-          else if (currentOperator === '/') result = Math.floor(result / percentValue);
-          
-          if (i < parsed.length - 1 && parsed[i + 1].type === 'operator') {
+        const percentValue = Math.floor((token.percent / 100) * token.value);
+        output += `${token.percent}% of ${token.value} = ${percentValue}`;
+        
+        if (currentOperator === '+') result += percentValue;
+        else if (currentOperator === '-') result -= percentValue;
+        else if (currentOperator === '*') result *= percentValue;
+        else if (currentOperator === '/') result = Math.floor(result / percentValue);
+        
+        if (i < parsed.length - 1 && parsed[i + 1].type === 'operator') {
             output += ` ${parsed[i + 1].value} `;
-          }
+        }
         }
         else if (token.type === 'number') {
-          output += token.value;
-          
-          if (currentOperator === '+') result += token.value;
-          else if (currentOperator === '-') result -= token.value;
-          else if (currentOperator === '*') result *= token.value;
-          else if (currentOperator === '/') result = Math.floor(result / token.value);
-          
-          if (i < parsed.length - 1 && parsed[i + 1].type === 'operator') {
+        output += token.value;
+        
+        if (currentOperator === '+') result += token.value;
+        else if (currentOperator === '-') result -= token.value;
+        else if (currentOperator === '*') result *= token.value;
+        else if (currentOperator === '/') result = Math.floor(result / token.value);
+        
+        if (i < parsed.length - 1 && parsed[i + 1].type === 'operator') {
             output += ` ${parsed[i + 1].value} `;
-          }
+        }
         }
         else if (token.type === 'operator') {
-          currentOperator = token.value;
+        currentOperator = token.value;
+        }
+    }
+
+    return { result, output };
+    }
+
+
+  </script>
+  <script> //UI and splash somethings..
+           // --- Event Listeners ---
+    let lastInput = "";
+
+    diceInput.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const currentInput = diceInput.value.trim();
+        if (currentInput) {
+          lastInput = currentInput;
+          processInput();
+        } else {
+          processInput();
+        }
+      } else if (event.key === 'Tab') {
+        event.preventDefault();
+        diceInput.value = lastInput;
+      }
+    });
+
+
+    outputArea.addEventListener('click', () => diceInput.focus());
+    document.getElementById('input-line').addEventListener('click', () => diceInput.focus());
+    diceInput.focus();
+
+    // Add clipboard functionality
+    const clipboardBtn = document.getElementById('clipboard-btn');
+
+    clipboardBtn.addEventListener('click', function() {
+    const outputText = outputArea.innerText;
+    navigator.clipboard.writeText(outputText).then(() => {
+        // Show feedback
+        const originalText = clipboardBtn.textContent;
+        clipboardBtn.textContent = '✓ Copied!';
+        clipboardBtn.classList.add('copied');
+        
+        // Reset button after 2 seconds
+        setTimeout(() => {
+        clipboardBtn.textContent = originalText;
+        clipboardBtn.classList.remove('copied');
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+    });
+    });
+
+
+    // Splash screen functionality
+    const splashScreen = document.getElementById('splash-screen');
+    
+    // Hide splash screen after 2 seconds
+    setTimeout(() => {
+      splashScreen.classList.add('hidden');
+      // Remove splash screen from DOM after fade out
+      setTimeout(() => {
+        splashScreen.remove();
+      }, 1000);
+    }, 2000);
+  </script>
+  <script> //ManyThings
+    
+    function drawCard() {
+      const deck = [
+        { name: "Balance", effect: "Your alignment changes. Lawful becomes chaotic, good becomes evil, and vice versa." },
+        { name: "Comet", effect: "Defeat the next hostile monster alone to gain a level, or this card has no effect." },
+        { name: "Donjon", effect: "You are imprisoned in an extradimensional sphere. You draw no more cards.", endDraws: true },
+        { name: "Euryale", effect: "You are cursed with a -2 penalty on saving throws until ended by a god or The Fates card." },
+        { name: "The Fates", effect: "You can erase one event as if it never happened." },
+        { name: "Flames", effect: "A powerful devil becomes your enemy until one of you dies." },
+        { name: "Fool", effect: "Lose 10,000 XP and draw again, counting both draws as one." },
+        { name: "Gem", effect: "25 pieces of jewelry worth 2,000 gp each or 50 gems worth 1,000 gp each appear at your feet." },
+        { name: "Idiot", effect: "Permanently reduce Intelligence by 1d4+1. You can draw one additional card." },
+        { name: "Jester", effect: "Gain 10,000 XP or draw two additional cards." },
+        { name: "Key", effect: "A rare or rarer magic weapon appears in your hands." },
+        { name: "Knight", effect: "A 4th-level fighter of your race appears and serves you loyally until death." },
+        { name: "Moon", effect: "You can cast the Wish spell 1d3 times." },
+        { name: "Rogue", effect: "An NPC becomes hostile toward you. Only a Wish spell or divine intervention can end this hostility." },
+        { name: "Ruin", effect: "All wealth you own, other than magic items, is lost." },
+        { name: "Skull", effect: "You summon an avatar of death that fights you alone until one of you dies." },
+        { name: "Star", effect: "Increase one ability score by 2, up to a maximum of 24." },
+        { name: "Sun", effect: "Gain 50,000 XP and a wondrous item." },
+        { name: "Talons", effect: "All magic items you wear or carry disintegrate." },
+        { name: "Throne", effect: "Gain proficiency in Persuasion and rightful ownership of a keep, currently occupied by monsters." },
+        { name: "Vizier", effect: "Within a year, you can ask a question and receive a truthful answer." },
+        { name: "The Void", effect: "Your soul is trapped in an object. You draw no more cards.", endDraws: true }
+      ];
+
+      const card = deck[Math.floor(Math.random() * deck.length)];
+      addOutputLine(`Card drawn: <strong>${card.name}</strong> - ${card.effect}`);
+
+      if (card.name === "Donjon" || card.name === "The Void") {
+        canDraw = false;
+        drawCount = 0;
+        manyThingsMode = false;
+        addOutputLine("Many Things mode deactivated due to the card effect.");
+      } else if (card.endDraws) {
+        canDraw = false;
+        drawCount = 0;
+        addOutputLine("You can no longer draw cards.");
+      } else if (card.name === "Fool") {
+        drawCount--;
+        addOutputLine("You must draw again, counting both draws as one.");
+      } else if (card.name === "Idiot") {
+        drawCount++;
+        addOutputLine("You can draw one additional card.");
+      } else if (card.name === "Jester") {
+        drawCount += 2;
+        addOutputLine("You can draw two additional cards.");
+      } else {
+        drawCount--;
+        addOutputLine(`Draws remaining: ${drawCount}`);
+      }
+
+      if (drawCount <= 0 && canDraw) {
+        addOutputLine("You have completed your draws.");
+        manyThingsMode = false;
+      }
+    }
+  </script>
+  <script>//Spells
+        const spellDamage = {
+      fireball: "8d6",
+      magicMissile: "3d4+3",
+      scorchingRay: "2d6",
+      chromaticOrb: "3d8",
+      lightningBolt: "8d6",
+      inflictWounds: "3d10",
+      disintegrate: "10d6+40",
+      blight: "8d8",
+      coneOfCold: "8d8",
+      burningHands: "3d6",
+      thunderwave: "2d8",
+      boomingBlade: "1d8",
+      greenFlameBlade: "1d8",
+      mindSliver: "1d6",
+      dissonantWhispers: "3d6",
+      eldritchBlast: "1d10",
+      guidingBolt: "4d6",
+      iceKnife: "1d10+2d6",
+      spiritGuardians: "3d8",
+      moonbeam: "2d10",
+      sacredFlame: "1d8",
+    };
+
+    function processSpellInput(inputText) {
+      const spellMatch = inputText.match(/(\w+)(?:\s+(\d+)(?:th|st|nd|rd))?(.*)/i);
+      if (!spellMatch) return null;
+
+      const spellName = spellMatch[1].toLowerCase();
+      const spellLevel = parseInt(spellMatch[2]) || null;
+      const modifiers = spellMatch[3]?.trim() || "";
+
+      if (!spellDamage[spellName]) return null;
+
+      if (spellLevel && spellLevel > 9) {
+        showError("Spell level cannot exceed 9th level.");
+        return null;
+      }
+
+      let baseDamage = spellDamage[spellName];
+
+      // Adjust damage for upcasting
+      if (spellLevel) {
+        const baseLevel = {
+          fireball: 3,
+          magicMissile: 1,
+          scorchingRay: 2,
+          chromaticOrb: 1,
+          lightningBolt: 3,
+          inflictWounds: 1,
+          disintegrate: 6,
+          blight: 4,
+          coneOfCold: 5,
+          burningHands: 1,
+          thunderwave: 1,
+          boomingBlade: 0,
+          greenFlameBlade: 0,
+          mindSliver: 0,
+          dissonantWhispers: 1,
+          eldritchBlast: 0,
+          guidingBolt: 1,
+          iceKnife: 1,
+          spiritGuardians: 3,
+          moonbeam: 2,
+          sacredFlame: 0,
+        }[spellName] || 0;
+
+        const extraDice = {
+          fireball: "d6",
+          lightningBolt: "d6",
+          scorchingRay: "d6",
+          inflictWounds: "d10",
+          blight: "d8",
+          coneOfCold: "d8",
+          burningHands: "d6",
+          thunderwave: "d8",
+          guidingBolt: "d6",
+          moonbeam: "d10",
+          spiritGuardians: "d8",
+        }[spellName];
+
+        if (extraDice && spellLevel > baseLevel) {
+          const extraLevels = spellLevel - baseLevel;
+          baseDamage += `+${extraLevels}${extraDice}`;
         }
       }
-      
-      return { result, output };
+
+      // Handle combining spells and modifiers with operators (e.g., fireball + fireball + fireball or 1 + 2 + 2 + + 3 / 2 * 2)
+      const combinedSpells = modifiers.split(/([+\-*/])/).map(mod => mod.trim().toLowerCase());
+      let combinedDamage = baseDamage;
+
+      combinedSpells.forEach((mod, index) => {
+        if (spellDamage[mod]) {
+          combinedSpells[index] = `(${spellDamage[mod]})`;
+        }
+      });
+
+      const expression = [baseDamage, ...combinedSpells].join(' ');
+
+      return expression.trim();
     }
+
+  </script>
+  <script>
+
+    let manyThingsMode = false;
+    let drawCount = 0;
+    let canDraw = true;
 
     function processInput() {
       const inputText = diceInput.value.trim();
-      
+
       if (inputText) {
         addOutputLine(inputText, 'command-echo');
       } else {
+        diceInput.value = '';
+        return;
+      }
+
+      const spellResult = processSpellInput(inputText);
+      if (spellResult) {
+        const parsed = parseDiceExpression(spellResult);
+        const { result, output } = evaluateDiceExpression(parsed);
+        addOutputLine(`${output} = <span class="total">${result}</span>`);
+        diceInput.value = '';
+        return;
+      }
+
+      if (inputText.toLowerCase() === 'manythings') {
+        if (manyThingsMode) {
+          manyThingsMode = false;
+          addOutputLine("Many Things mode deactivated.");
+        } else {
+          manyThingsMode = true;
+          drawCount = 0;
+          canDraw = true;
+          addOutputLine("Many Things mode activated. Type 'declare X', X being the amount you want to draw then type 'draw' to draw a card.");
+        }
+        diceInput.value = '';
+        return;
+      }
+
+      if (manyThingsMode) {
+        if (inputText.toLowerCase().startsWith('declare')) {
+          const parts = inputText.split(' ');
+          if (parts.length === 2 && !isNaN(parts[1])) {
+            drawCount = parseInt(parts[1]);
+            addOutputLine(`Draw count declared: ${drawCount}`);
+          } else {
+            showError("Invalid declaration. Use 'declare <number>' to set your draw count.");
+          }
+        } else if (inputText.toLowerCase() === 'draw') {
+          if (!canDraw) {
+            showError("You can no longer draw cards.");
+          } else if (drawCount <= 0) {
+            showError("Declare your draw count before drawing cards.");
+          } else {
+            drawCard();
+          }
+        } else {
+          showError("Invalid command in Many Things mode. Use 'declare <number>' or 'draw'.");
+        }
         diceInput.value = '';
         return;
       }
@@ -528,36 +566,36 @@
 
       if (inputText.toLowerCase() === 'legend') {
         const legendText = `
-<div>--------------------------------------------------</div>
-<div><strong>Dice Roll Commands:</strong></div>
-<div>--------------------------------------------------</div>
-<div><code>xDy</code> - Roll x dice with y sides (e.g., 3d6)</div>
-<div><code>d%</code> or <code>d100</code> - Roll a percentage die (1-100)</div>
-<div><code>x%y</code> - Calculate x percent of y (e.g., 50%20 = 10)</div>
-<div><code>xDy + m</code> - Roll x dice with y sides and add m (e.g., 2d20 + 5)</div>
-<div><code>xDy * f</code> - Roll x dice with y sides and multiply by f (e.g., 1d6 * 2)</div>
-<div><code>xDy / f</code> - Roll x dice with y sides and divide by f (e.g., 1d20 / 2)</div>
-<div><code>n#xDy</code> - Roll n sets of x dice with y sides (e.g., 5#2d6)</div>
-<div><code>adY</code> - Roll with advantage (e.g., ad20)</div>
-<div><code>ddY</code> - Roll with disadvantage (e.g., dd20)</div>
-<div><code>adY + m</code> - Roll with advantage and add m (e.g., ad20 + 5)</div>
-<div><code>ddY * f</code> - Roll with disadvantage and multiply by f (e.g., dd20 * 2)</div>
-<div>--------------------------------------------------</div>
-<div><strong>Examples:</strong></div>
-<div>--------------------------------------------------</div>
-<div><code>3d6 + 2</code> - Roll 3 six-sided dice and add 2</div>
-<div><code>d%</code> - Roll a percentage die (1-100)</div>
-<div><code>2d% + 10</code> - Roll 2 percentage dice and add 10</div>
-<div><code>50%20</code> - Calculate 50% of 20 (result: 10)</div>
-<div><code>100%20 + 2</code> - Calculate 100% of 20 and add 2 (result: 22)</div>
-<div><code>1d20 + 5 * 2</code> - Roll 1d20, add 5, then multiply by 2</div>
-<div><code>5#2d6 + 3</code> - Roll 5 sets of 2d6+3</div>
-<div><code>ad20 + 5</code> - Roll d20 with advantage and add 5</div>
-<div><code>dd20 * 2</code> - Roll d20 with disadvantage and multiply by 2</div>
-<div>--------------------------------------------------</div>
-<div>Type 'clear' to clear the screen</div>
-<div>--------------------------------------------------</div>
-`;
+        <div>--------------------------------------------------</div>
+        <div><strong>Dice Roll Commands:</strong></div>
+        <div>--------------------------------------------------</div>
+        <div><code>xDy</code> - Roll x dice with y sides (e.g., 3d6)</div>
+        <div><code>d%</code> or <code>d100</code> - Roll a percentage die (1-100)</div>
+        <div><code>x%y</code> - Calculate x percent of y (e.g., 50%20 = 10)</div>
+        <div><code>xDy + m</code> - Roll x dice with y sides and add m (e.g., 2d20 + 5)</div>
+        <div><code>xDy * f</code> - Roll x dice with y sides and multiply by f (e.g., 1d6 * 2)</div>
+        <div><code>xDy / f</code> - Roll x dice with y sides and divide by f (e.g., 1d20 / 2)</div>
+        <div><code>n#xDy</code> - Roll n sets of x dice with y sides (e.g., 5#2d6)</div>
+        <div><code>adY</code> - Roll with advantage (e.g., ad20)</div>
+        <div><code>ddY</code> - Roll with disadvantage (e.g., dd20)</div>
+        <div><code>adY + m</code> - Roll with advantage and add m (e.g., ad20 + 5)</div>
+        <div><code>ddY * f</code> - Roll with disadvantage and multiply by f (e.g., dd20 * 2)</div>
+        <div>--------------------------------------------------</div>
+        <div><strong>Examples:</strong></div>
+        <div>--------------------------------------------------</div>
+        <div><code>3d6 + 2</code> - Roll 3 six-sided dice and add 2</div>
+        <div><code>d%</code> - Roll a percentage die (1-100)</div>
+        <div><code>2d% + 10</code> - Roll 2 percentage dice and add 10</div>
+        <div><code>50%20</code> - Calculate 50% of 20 (result: 10)</div>
+        <div><code>100%20 + 2</code> - Calculate 100% of 20 and add 2 (result: 22)</div>
+        <div><code>1d20 + 5 * 2</code> - Roll 1d20, add 5, then multiply by 2</div>
+        <div><code>5#2d6 + 3</code> - Roll 5 sets of 2d6+3</div>
+        <div><code>ad20 + 5</code> - Roll d20 with advantage and add 5</div>
+        <div><code>dd20 * 2</code> - Roll d20 with disadvantage and multiply by 2</div>
+        <div>--------------------------------------------------</div>
+        <div>Type 'clear' to clear the screen</div>
+        <div>--------------------------------------------------</div>
+        `;
         addOutputLine(legendText);
         diceInput.value = '';
         return;
@@ -586,50 +624,13 @@
       diceInput.focus();
     }
 
-    // --- Event Listeners ---
-    diceInput.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        processInput();
-      }
-    });
-
-    outputArea.addEventListener('click', () => diceInput.focus());
-    document.getElementById('input-line').addEventListener('click', () => diceInput.focus());
-    diceInput.focus();
-
-    // Add clipboard functionality
-    const clipboardBtn = document.getElementById('clipboard-btn');
-    
-    clipboardBtn.addEventListener('click', function() {
-      const outputText = outputArea.innerText;
-      navigator.clipboard.writeText(outputText).then(() => {
-        // Show feedback
-        const originalText = clipboardBtn.textContent;
-        clipboardBtn.textContent = '✓ Copied!';
-        clipboardBtn.classList.add('copied');
-        
-        // Reset button after 2 seconds
-        setTimeout(() => {
-          clipboardBtn.textContent = originalText;
-          clipboardBtn.classList.remove('copied');
-        }, 2000);
-      }).catch(err => {
-        console.error('Failed to copy text: ', err);
-      });
-    });
-
-    // Splash screen functionality
-    const splashScreen = document.getElementById('splash-screen');
-    
-    // Hide splash screen after 2 seconds
-    setTimeout(() => {
-      splashScreen.classList.add('hidden');
-      // Remove splash screen from DOM after fade out
-      setTimeout(() => {
-        splashScreen.remove();
-      }, 1000);
-    }, 2000);
   </script>
+
+
+
+  <footer style="position: fixed; bottom: 0; left: 0; padding: 5px; font-size: 12px; width: 100%; text-align: left;">
+    &copy; 2025 Dice Terminal | Yuriagucci
+  </footer>
 </body>
 </html>
+
