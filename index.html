@@ -10,6 +10,106 @@
   
   <link rel="stylesheet" href="main.css">
 
+  <style>
+    .rerolled {
+      color: var(--dimmed-roll-color);
+      text-decoration: line-through;
+    }
+
+    /* Modal styles */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+    }
+
+    .modal-content {
+      position: relative;
+      background-color: #1e1e1e;
+      margin: 10% auto;
+      padding: 20px;
+      width: 80%;
+      max-width: 800px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #d4d4d4;
+      font-family: 'Consolas', monospace;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #333;
+    }
+
+    .modal-title {
+      font-size: 1.5em;
+      color: #4ec9b0;
+    }
+
+    .close-modal {
+      background: none;
+      border: none;
+      color: #d4d4d4;
+      font-size: 1.5em;
+      cursor: pointer;
+    }
+
+    .close-modal:hover {
+      color: #f44747;
+    }
+
+    .command-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 15px;
+    }
+
+    .command-group {
+      margin-bottom: 20px;
+    }
+
+    .command-group-title {
+      color: #4ec9b0;
+      margin-bottom: 10px;
+      font-size: 1.2em;
+    }
+
+    .command-item {
+      margin-bottom: 8px;
+    }
+
+    .command-item code {
+      color: #d4d4d4;
+      background-color: #2d2d2d;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    .command-item .description {
+      color: #858585;
+      margin-left: 10px;
+    }
+
+    /* Item link styles */
+    #output-area a {
+      color: #4ec9b0;
+      text-decoration: none;
+    }
+
+    #output-area a:hover {
+      text-decoration: underline;
+    }
+  </style>
+
 </head>
 <body>
   <div id="splash-screen">
@@ -18,13 +118,51 @@
     <div class="splash-subtitle">Loading...</div>
   </div>
 
+  <!-- Help Modal -->
+  <div id="helpModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">Dice Terminal Commands</div>
+        <button class="close-modal">&times;</button>
+      </div>
+      <div class="command-list">
+        <div class="command-group">
+          <div class="command-group-title">Basic Dice Rolls</div>
+          <div class="command-item"><code>xDy</code><span class="description">Roll x dice with y sides (e.g., 3d6)</span></div>
+          <div class="command-item"><code>d%</code><span class="description">Roll a percentage die (1-100)</span></div>
+          <div class="command-item"><code>x%y</code><span class="description">Calculate x percent of y (e.g., 50%20 = 10)</span></div>
+          <div class="command-item"><code>xDy + m</code><span class="description">Roll x dice with y sides and add m</span></div>
+          <div class="command-item"><code>xDy * f</code><span class="description">Roll x dice with y sides and multiply by f</span></div>
+          <div class="command-item"><code>xDy / f</code><span class="description">Roll x dice with y sides and divide by f</span></div>
+        </div>
+        <div class="command-group">
+          <div class="command-group-title">Advanced Rolls</div>
+          <div class="command-item"><code>n#xDy</code><span class="description">Roll n sets of x dice with y sides</span></div>
+          <div class="command-item"><code>adY</code><span class="description">Roll with advantage (e.g., ad20)</span></div>
+          <div class="command-item"><code>ddY</code><span class="description">Roll with disadvantage (e.g., dd20)</span></div>
+          <div class="command-item"><code>adY + m</code><span class="description">Roll with advantage and add m</span></div>
+          <div class="command-item"><code>ddY * f</code><span class="description">Roll with disadvantage and multiply by f</span></div>
+        </div>
+        <div class="command-group">
+          <div class="command-group-title">Special Commands</div>
+          <div class="command-item"><code>gwf</code><span class="description">Toggle Great Weapon Fighting mode</span></div>
+          <div class="command-item"><code>bonus</code><span class="description">Answer a D&D trivia question for luck bonus</span></div>
+          <div class="command-item"><code>8ball</code><span class="description">Ask the magic 8-ball a question</span></div>
+          <div class="command-item"><code>clear</code><span class="description">Clear the terminal screen</span></div>
+          <div class="command-item"><code>help</code><span class="description">Show this help dialog</span></div>
+          <div class="command-item"><code>item [tier]</code><span class="description">Roll a random magic item (optionally from specified tier)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="terminal-container">
     <button id="clipboard-btn" title="Copy roll log to clipboard">📋 Copy Log</button>
     <div id="output-area">
       <div>Welcome to the Dice Terminal!</div>
       <div>Supports: <code>xDy+m*f</code>, <code>adY+m</code>, <code>ddY+m</code>, <code>n#xDy+m</code></div>
       <div>Type 'clear' to clear screen. Press Enter to roll.</div>
-      <div>Type 'legend' to see list of possible commands.</div>
+      <div>Type 'help' to see list of possible commands.</div>
       <div>--------------------------------------------------</div>
     </div>
     <div id="input-line">
@@ -38,6 +176,56 @@
     const diceInput = document.getElementById('dice-input');
     const outputArea = document.getElementById('output-area');
     const rollSound = document.getElementById('roll-sound');
+    let gwfMode = false;
+    let luckModifier = 0; // Track luck modifier
+    let awaitingAnswer = false; // Track if waiting for answer
+    let currentQuestion = null; // Track current question
+
+    const bonusQuestions = [
+      {
+        question: "What is Codisius' favorite spell?",
+        answer: "Fireball",
+        explanation: '"From my eyes, through my ears, through my skin, through my head. Fireball!" - Codisius Leafgar'
+      },
+      {
+        question: "What is Farron's last name?",
+        answer: "N/A",
+        explanation: "We don't know. He never told us."
+      },
+    ];
+
+    const magic8BallResponses = [
+      { response: "It is certain.", type: "positive" },
+      { response: "It is decidedly so.", type: "positive" },
+      { response: "Without a doubt.", type: "positive" },
+      { response: "Yes, definitely.", type: "positive" },
+      { response: "You may rely on it.", type: "positive" },
+      { response: "As I see it, yes.", type: "positive" },
+      { response: "Most likely.", type: "positive" },
+      { response: "Outlook good.", type: "positive" },
+      { response: "Yes.", type: "positive" },
+      { response: "Signs point to yes.", type: "positive" },
+      { response: "Reply hazy, try again.", type: "neutral" },
+      { response: "Ask again later.", type: "neutral" },
+      { response: "Better not tell you now.", type: "neutral" },
+      { response: "Cannot predict now.", type: "neutral" },
+      { response: "Concentrate and ask again.", type: "neutral" },
+      { response: "Don't count on it.", type: "negative" },
+      { response: "My reply is no.", type: "negative" },
+      { response: "My sources say no.", type: "negative" },
+      { response: "Outlook not so good.", type: "negative" },
+      { response: "Very doubtful.", type: "negative" },
+      { response: "The dice gods frown upon this.", type: "negative" },
+      { response: "Your luck modifier says no.", type: "negative" },
+      { response: "Critical fail on that one.", type: "negative" },
+      { response: "The DM is watching...", type: "neutral" },
+      { response: "Roll for insight first.", type: "neutral" },
+      { response: "Flip a coin: Yes for heads, No for tails.", type: "neutral" },
+      { response: "The answer lies within your character sheet.", type: "neutral" },
+      { response: "Consult your spellbook.", type: "neutral" },
+      { response: "Your deity is silent.", type: "neutral" },
+      { response: "The answer is written in Draconic.", type: "neutral" }
+    ];
 
     function addOutputLine(htmlContent, type = 'result') {
       const line = document.createElement('div');
@@ -50,11 +238,97 @@
     function showError(message) {
       addOutputLine(message, 'error');
     }
+
+    function askBonusQuestion() {
+      const randomIndex = Math.floor(Math.random() * bonusQuestions.length);
+      currentQuestion = bonusQuestions[randomIndex];
+      addOutputLine(`<strong>Bonus Question:</strong> ${currentQuestion.question}`);
+      awaitingAnswer = true;
+    }
+
+    function checkAnswer(answer) {
+      if (!currentQuestion) return false;
+      
+      const isCorrect = answer.trim().toLowerCase() === currentQuestion.answer.toLowerCase();
+      if (isCorrect) {
+        luckModifier = 25;
+        addOutputLine(`Correct! +25% luck to your next d20 roll.`);
+        addOutputLine(`Explanation: ${currentQuestion.explanation}`);
+      } else {
+        luckModifier = -25;
+        showError(`Incorrect. -25% luck to your next d20 roll.`);
+        addOutputLine(`The correct answer was: ${currentQuestion.answer}`);
+        addOutputLine(`Explanation: ${currentQuestion.explanation}`);
+      }
+      
+      currentQuestion = null;
+      awaitingAnswer = false;
+      return isCorrect;
+    }
+
+    function askMagic8Ball() {
+      const response = magic8BallResponses[Math.floor(Math.random() * magic8BallResponses.length)];
+      const color = response.type === 'positive' ? '#4ec9b0' : 
+                   response.type === 'negative' ? '#f44747' : 
+                   '#d4d4d4';
+      addOutputLine(`<div style="color: ${color}">${response.response}</div>`);
+    }
   </script>
   <script> //diceUtils
     function rollDie(sides) {
-    if (sides < 1) return 1; // Treat invalid dice sides as 1
-    return Math.floor(Math.random() * sides) + 1;
+      if (sides < 1) return 1; // Treat invalid dice sides as 1
+      let roll = Math.floor(Math.random() * sides) + 1;
+      let rerolled = false;
+      
+      // Apply GWF reroll for 1's and 2's on non-d20 dice
+      // Note: You must keep the new roll even if it's another 1 or 2
+      if (gwfMode && sides !== 20 && (roll === 1 || roll === 2)) {
+        const originalRoll = roll;
+        roll = Math.floor(Math.random() * sides) + 1;
+        rerolled = true;
+        return { roll, originalRoll, rerolled };
+      }
+
+      // Apply luck modification for d20 rolls using probability adjustment
+      if (sides === 20 && luckModifier !== 0) {
+        // For negative luck, make lower numbers more likely
+        // For positive luck, make higher numbers more likely
+        const random = Math.random();
+        let adjustedRoll;
+        
+        if (luckModifier < 0) {
+          // Negative luck: higher chance of lower numbers
+          const baseChance = 1 / 20;
+          const adjustedChance = baseChance * (1 - luckModifier / 100);
+          const threshold = adjustedChance * 20;
+          
+          if (random < threshold) {
+            // Higher chance of rolling 1-10
+            adjustedRoll = Math.floor(random * 10 / threshold) + 1;
+          } else {
+            // Lower chance of rolling 11-20
+            adjustedRoll = Math.floor((random - threshold) * 10 / (1 - threshold)) + 11;
+          }
+        } else {
+          // Positive luck: higher chance of higher numbers
+          const baseChance = 1 / 20;
+          const adjustedChance = baseChance * (1 + luckModifier / 100);
+          const threshold = adjustedChance * 20;
+          
+          if (random < threshold) {
+            // Higher chance of rolling 11-20
+            adjustedRoll = Math.floor(random * 10 / threshold) + 11;
+          } else {
+            // Lower chance of rolling 1-10
+            adjustedRoll = Math.floor((random - threshold) * 10 / (1 - threshold)) + 1;
+          }
+        }
+        
+        roll = adjustedRoll;
+        luckModifier = 0; // Reset luck modifier after use
+      }
+      
+      return { roll, rerolled };
     }
 
 
@@ -144,8 +418,8 @@
     if (parsed.type === 'advdis') {
         const roll1 = rollDie(parsed.sides);
         const roll2 = rollDie(parsed.sides);
-        const chosen = parsed.adv ? Math.max(roll1, roll2) : Math.min(roll1, roll2);
-        const discarded = parsed.adv ? Math.min(roll1, roll2) : Math.max(roll1, roll2);
+        const chosen = parsed.adv ? Math.max(roll1.roll, roll2.roll) : Math.min(roll1.roll, roll2.roll);
+        const discarded = parsed.adv ? Math.min(roll1.roll, roll2.roll) : Math.max(roll1.roll, roll2.roll);
         
         let critStatus = '';
         if (parsed.sides === 20) {
@@ -153,10 +427,10 @@
         if (chosen === 1) critStatus = '<span class="crit-fail">Critical Fail!</span>';
         }
 
-        const rollText = `<span class="rolls">[${roll1 === chosen ? 
-        `<strong>${roll1}</strong>` : `<span class="discarded">${roll1}</span>`}, ${
-        roll2 === chosen ? 
-        `<strong>${roll2}</strong>` : `<span class="discarded">${roll2}</span>`}]</span> -> ${chosen}`;
+        const rollText = `<span class="rolls">[${roll1.roll === chosen ? 
+        `<strong>${roll1.roll}</strong>` : `<span class="discarded">${roll1.roll}</span>`}, ${
+        roll2.roll === chosen ? 
+        `<strong>${roll2.roll}</strong>` : `<span class="discarded">${roll2.roll}</span>`}]</span> -> ${chosen}`;
 
         let result = chosen;
         let output = `Roll (${parsed.adv ? 'Adv' : 'Dis'}): ${rollText} ${critStatus}`;
@@ -213,11 +487,20 @@
         const rolls = [];
         let sum = 0;
         let critStatus = '';
+        let rollDetails = [];
         
         for (let j = 0; j < token.count; j++) {
-            const roll = rollDie(token.sides);
+            const { roll, originalRoll, rerolled } = rollDie(token.sides);
             rolls.push(roll);
             sum += roll;
+            
+            // Build roll details with reroll information
+            if (rerolled) {
+              rollDetails.push(`<span class="rerolled">${originalRoll}</span>→<strong>${roll}</strong>`);
+            } else {
+              rollDetails.push(roll);
+            }
+            
             // Only check for critical hits/fails on d20
             if (token.sides === 20) {
             if (roll === 20) critStatus = '<span class="crit-hit">Critical Hit!</span>';
@@ -225,7 +508,7 @@
             }
         }
         
-        const rollText = `<span class="rolls">[${rolls.join(', ')}]</span>`;
+        const rollText = `<span class="rolls">[${rollDetails.join(', ')}]</span>`;
         output += `${rollText} = ${sum} ${critStatus}`;
         
         if (currentOperator === '+') result += sum;
@@ -333,6 +616,222 @@
   </script>
   <script> //ManyThings
     
+    const itemTiers = {
+      common: [
+        "Armblade", "Armor of Gleaming", "Band of Loyalty", "Bead of Nourishment", "Bead of Refreshment",
+        "Boots of False Tracks", "Bottle of Boundless Coffee", "Breathing Bubble", "Candle of the Deep", "Cast-Off Armor",
+        "Charlatan's Die", "Chest of Preserving", "Cleansing Stone", "Cloak of Billowing", "Cloak of Many Fashions",
+        "Clockwork Amulet", "Clothes of Mending", "Coin of Delving", "Cuddly Strixhaven Mascot", "Dark Shard Amulet",
+        "Dread Helm", "Ear Horn of Hearing", "Earring of Message", "Enduring Spellbook", "Ersatz Eye",
+        "Everbright Lantern", "Feather Token", "Glamerweave", "Hat of Vermin", "Hat of Wizardry",
+        "Heward's Handy Spice Pouch", "Horn of Silent Alarm", "Illuminator's Tattoo", "Imbued Wood Focus", "Instrument of Illusions",
+        "Instrument of Scribing", "Keycharm", "Lantern of Tracking", "Lock of Trickery", "Masque Charm",
+        "Masquerade Tattoo", "Medal of Muscle", "Medal of the Conch", "Medal of the Horizonback", "Medal of the Maze",
+        "Medal of the Meat Pie", "Medal of the Wetlands", "Medal of Wit", "Mind Crystal", "Moodmark Paint",
+        "Moon-Touched Sword", "Mystery Key", "Orb of Direction", "Orb of Gonging", "Orb of Shielding",
+        "Orb of Time", "Perfume of Bewitching", "Pipe of Remembrance", "Pipe of Smoke Monsters", "Pole of Angling",
+        "Pole of Collapsing", "Pot of Awakening", "Potion of Climbing", "Potion of Healing", "Potion of Watchful Rest",
+        "Pressure Capsule", "Prosthetic Limb", "Rope of Mending", "Ruby of the War Mage", "Scribe's Pen",
+        "Sekolahian Worshipping Statuette", "Shield of Expression", "Shiftweave", "Smoldering Armor", "Spell Scroll",
+        "Spellshard", "Spellwrought Tattoo", "Staff of Adornment", "Staff of Birdcalls", "Staff of Flowers",
+        "Strixhaven Pennant", "Talking Doll", "Tankard of Plenty", "Tankard of Sobriety", "Thermal Cube",
+        "Unbreakable Arrow", "Veteran's Cane", "Vox Seeker", "Walloping Ammunition", "Wand of Conducting",
+        "Wand of Pyrotechnics", "Wand of Scowls", "Wand of Smiles", "Wand Sheath"
+      ],
+      uncommon: [
+        "Adamantine Armor", "Alchemy Jug", "Alchemy Jug (Blue)", "Alchemy Jug (Orange)", "All-Purpose Tool",
+        "Ammunition, +1, +2, or +3", "Amulet of Proof Against Detection and Location", "Amulet of the Devout", "Amulet of the Drunkard", "Arcane Grimoire",
+        "Armor Of Fungal Spores", "Armor Of The Fallen", "Armor Of Weightlessness", "Bag Of Bounty", "Bag of Holding",
+        "Bag of Tricks", "Balance of Harmony", "Balloon Pack", "Barrier Tattoo", "Blasted Goggles",
+        "Blood of the Lycanthrope Antidote", "Blood Spear", "Bloodrage Greataxe", "Bloodwell Vial", "Boomerang Shield",
+        "Boots of Elvenkind", "Boots of Striding and Springing", "Boots of the Winterlands", "Bottled Breath", "Bracers of Archery",
+        "Brooch of Living Essence", "Brooch of Shielding", "Broom of Flying", "Cap of Water Breathing", "Card Sharp's Deck",
+        "Circlet of Blasting", "Circlet of Human Perfection", "Cloak of Elvenkind", "Cloak of Protection", "Cloak of the Manta Ray",
+        "Coiling Grasp Tattoo", "Cracked Driftglobe", "Cursed Luckstone", "Decanter of Endless Water", "Deck of Illusions",
+        "Deck Of Miscellany", "Deck Of Wonder", "Dragon Vessel", "Dragonhide Belt", "Dragon's Wrath Weapon",
+        "Dragon-Touched Focus", "Dried Leech", "Driftglobe", "Dust of Corrosion", "Dust of Deliciousness",
+        "Dust of Disappearance", "Dust of Dryness", "Dust of Sneezing and Choking", "Earworm", "Eldritch Claw Tattoo",
+        "Elemental Gem", "Emerald Pen", "Eversmoking Bottle", "Eyes of Charming", "Eyes of Minute Seeing",
+        "Eyes of the Eagle", "Fabulist Gem", "Feywild Shard", "Figurine of Wondrous Power", "Finder's Goggles",
+        "Gauntlets of Ogre Power", "Gem of Brightness", "Glamerweave", "Gloves of Missile Snaring", "Gloves of Swimming and Climbing",
+        "Gloves of Thievery", "Goggles of Night", "Goggles of Object Reading", "Guardian Emblem", "Guild Keyrune",
+        "Guild Signet", "Harkon's Bite", "Hat of Disguise", "Headband of Intellect", "Hellfire Weapon",
+        "Helm of Comprehending Languages", "Helm of Telepathy", "Helm of Underwater Action", "House Of Cards", "Immovable Rod",
+        "Infernal Puzzle Box", "Inquisitive's Goggles", "Insignia of Claws", "Instrument of the Bards", "Javelin of Lightning",
+        "Keoghtom's Ointment", "Lantern of Revealing", "Living Gloves", "Lorehold Primer", "Mariner's Armor",
+        "Mask of the Beast", "Medallion of Thoughts", "Mind Carapace Armor", "Mind Crystal", "Mithral Armor",
+        "Mizzium Apparatus", "Moon Sickle", "Mummy Rot Antidote", "Nature's Mantle", "Necklace of Adaptation",
+        "Night Caller", "Oil of Slipperiness", "Paper Bird", "Pearl of Power", "Periapt of Health",
+        "Periapt of Wound Closure", "Philter of Love", "Pipes of Haunting", "Pipes of the Sewers", "Piwafwi",
+        "Pixie Dust", "Plate Of Knight's Fellowship", "Portal Compass", "Potion of Advantage", "Potion of Animal Friendship",
+        "Potion of Fire Breath", "Potion of Giant Strength", "Potion of Growth", "Potion of Healing", "Potion of Poison",
+        "Potion Of Polychromy", "Potion of Psionic Fortitude", "Potion of Resistance", "Potion of Water Breathing", "Prehistoric Figurines of Wondrous Power",
+        "Prismari Primer", "Propeller Helm", "Psi Crystal", "Pyroconverger", "Quandrix Primer",
+        "Quiver of Ehlonna", "Rhythm Maker's Drum", "Ring of Jumping", "Ring of Mind Shielding", "Ring of Obscuring",
+        "Ring Of Puzzler's Wit", "Ring of Swimming", "Ring of the Orator", "Ring of Truth Telling", "Ring of Warmth",
+        "Ring of Water Walking", "Rings of Shared Suffering", "Robe of Serpents", "Robe of Useful Items", "Rod of Retribution",
+        "Rod of the Pact Keeper, +1, +2, +3", "Rope of Climbing", "Saddle of the Cavalier", "Scaled Ornament", "Seeker Dart",
+        "Sending Stones", "Sensory Stone", "Sentinel Shield", "Serpent Scale Armor", "Shatterspike",
+        "Shield, +1, +2, +3", "Shield Of The Tortoise", "Silverquill Primer", "Skyblinder Staff", "Sling Of Giant Felling",
+        "Slippers of Spider Climbing", "Smokepowder", "Soul Coin", "Spell Gem", "Spell Scroll",
+        "Spellwrought Tattoo", "Spies' Murmur", "Staff of the Adder", "Staff of the Python", "Stone of Good Luck (Luckstone)",
+        "Stone of Ill Luck", "Storm Boomerang", "Sword of Vengeance", "Thessaltoxin Antidote", "Trident of Fish Command",
+        "Wand of Entangle", "Wand of Magic Detection", "Wand of Magic Missiles", "Wand of Secrets", "Wand of the War Mage",
+        "Wand of Web", "Weapon, +1, +2, or +3", "Weapon of Warning", "Wheel of Wind and Water", "Wildspace Orrery",
+        "Wind Fan", "Winged Ammunition", "Winged Boots", "Wingwear", "Witherbloom Primer",
+        "Wraps Of Unarmed Prowess"
+      ],
+      rare: [
+        "Acheron Blade", "Alchemical Compendium", "All-Purpose Tool", "Ammunition, +1, +2, or +3", "Amulet of Health",
+        "Amulet of Protection from Turning", "Amulet of the Devout", "Arcane Grimoire", "Armor, +1, +2, or +3", "Armor of Resistance",
+        "Armor of Vulnerability", "Arrow-Catching Shield", "Astral Shard", "Astromancy Archive", "Atlas of Endless Horizons",
+        "Badge of the Watch", "Bag of Beans", "Banner of the Krig Rune", "Barrier Tattoo", "Battering Shield",
+        "Bead of Force", "Bell Branch", "Belt of Dwarvenkind", "Belt of Giant Strength", "Berserker Axe",
+        "Blod Stone", "Bloodwell Vial", "Bonecounter", "Boots of Levitation", "Boots of Speed",
+        "Bow Of Conflagration", "Bowl of Commanding Water Elementals", "Bracer of Flying Daggers", "Bracers of Celerity", "Bracers of Defense",
+        "Brazier of Commanding Fire Elementals", "Breastplate Of Balance", "Bridle of Capturing", "Butcher's Bib", "Cape of the Mountebank",
+        "Cauldron of Plenty", "Censer of Controlling Air Elementals", "Charm of Plant Command", "Chime of Opening", "Chromatic Rose",
+        "Claw of the Wyrm Rune", "Claws of the Umber Hulk", "Cloak of Displacement", "Cloak of the Bat", "Corpse Slayer",
+        "Crown of the Wrath Bringer", "Crystal Blade", "Cube of Force", "Daern's Instant Fortress", "Dagger of Blindsight",
+        "Dagger of Venom", "Deck Of Oracles", "Delver's Claws", "Demon Skin", "Devotee's Censer",
+        "Dimensional Shackles", "Docent", "Dodecahedron of Doom", "Donjon's Sundering Sphere", "Dragon Slayer",
+        "Dragon Vessel", "Dragon Wing Bow", "Dragonhide Belt", "Dragon's Wrath Weapon", "Dragontooth Dagger",
+        "Dragon-Touched Focus", "Duplicitous Manuscript", "Eagle Whistle", "Elemental Essence Shard", "Elixir of Health",
+        "Elven Chain", "Far Realm Shard", "Fate Dealer's Deck", "Feather of Diatryma Summoning", "Feywrought Armor",
+        "Figurine of Wondrous Power", "Flame Tongue", "Flayer Slayer", "Flying Chariot", "Folding Boat",
+        "Fulminating Treatise", "Galder's Bubble Pipe", "Gambler's Blade", "Gauntlets of Flaming Fury", "Gavel of the Venn Rune",
+        "Gem of Seeing", "Ghost Lantern", "Giant Slayer", "Glamoured Studded Leather", "Glimmering Moonbow",
+        "Gloomwrought Armor", "Glowrune Pigment", "Grasping Whip", "Guild Keyrune", "Gulthias Staff",
+        "Heart Weaver's Primer", "Hell Hound Cloak", "Helm of Teleportation", "Helm of the Gods", "Heward's Handy Haversack",
+        "Hook of Fisher's Delight", "Horn of Blasting", "Horn of the Endless Maze", "Horn of Valhalla", "Horseshoes of Speed",
+        "Iggwylv's Horn", "Instrument of the Bards", "Ioun Stone", "Iron Bands of Bilarro", "Kagonesti Forest Shroud",
+        "Knave's Eye Patch", "Lash of Immolation", "Leather Golem Armor", "Libram of Souls and Flesh", "Loadstone",
+        "Luminous War Pick", "Lyre of Building", "Mace of Disruption", "Mace of Smiting", "Mace of Terror",
+        "Mantle of Spell Resistance", "Mimir", "Mind Blade", "Mind Crystal", "Mind Lash",
+        "Mirror of the Past", "Mizzium Armor", "Mizzium Mortar", "Molten Bronze Skin", "Moon Sickle",
+        "Necklace of Fireballs", "Necklace of Prayer Beads", "Needle of Mending", "Oil of Etherealness", "Opal of the Ild Rune",
+        "Orb of the Stein Rune", "Outer Essence Shard", "Pariah's Shield", "Periapt of Proof against Poison", "Piwafwi of Fire Resistance",
+        "Planecaller's Codex", "Portable Hole", "Potion of Aqueous Form", "Potion of Clairvoyance", "Potion of Diminution",
+        "Potion of Gaseous Form", "Potion of Giant Strength", "Potion of Healing", "Potion of Heroism", "Potion of Invulnerability",
+        "Potion of Maximum Power", "Potion of Mind Control", "Potion of Mind Reading", "Prehistoric Figurines of Wondrous Power", "Professor Orb",
+        "Protective Verses", "Quaal's Feather Token", "Reveler's Concertina", "Rhythm Maker's Drum", "Ring of Animal Influence",
+        "Ring of Evasion", "Ring of Feather Falling", "Ring of Free Action", "Ring of Protection", "Ring of Resistance",
+        "Ring of Spell Storing", "Ring of Temporal Salvation", "Ring of the Ram", "Ring of X-Ray Vision", "Robe of Eyes",
+        "Robe of Summer", "Rod of Rulership", "Rod of the Pact Keeper, +1, +2, +3", "Rod of the Vonindod", "Rogue's Mantle",
+        "Rope of Entanglement", "Ruinous Flail", "Sage's Signet", "Saint Markovia's Thighbone", "Scaled Ornament",
+        "Scissors of Shadow Snipping", "Scorpion Armor", "Scroll of Protection", "Serpent's Fang", "Shadowfell Brand Tattoo",
+        "Shadowfell Shard", "Shard of Xeluan", "Shield, +1, +2, +3", "Shield of Far Sight", "Shield of Missile Attraction",
+        "Shrieking Greaves", "Siren Song Lyre", "Spell Gem", "Spell Scroll", "Spelljamming Helm",
+        "Spellwrought Tattoo", "Spider Staff", "Staff of Charming", "Staff of Defense", "Staff of Healing",
+        "Staff of Ruling", "Staff of Swarming Insects", "Staff of the Ivory Claw", "Staff of the Rooted Hills", "Staff of the Woodlands",
+        "Staff of Withering", "Starshot Crossbow", "Stone of Controlling Earth Elementals", "Stonespeaker Crystal", "Sun Blade",
+        "Sun Staff", "Sunforger", "Sword of Life Stealing", "Sword of Wounding", "Teleportation Tablet",
+        "Tentacle Rod", "Two-Birds Sling", "Ventilating Lungs", "Vicious Weapon", "Voidwalker Armor",
+        "Wand of Binding", "Wand of Enemy Detection", "Wand of Fear", "Wand of Fireballs", "Wand of Lightning Bolts",
+        "Wand of Paralysis", "Wand of the War Mage", "Wand of Viscid Globs", "Wand of Winter", "Wand of Wonder",
+        "War Horn of Valor", "Warrior's Passkey", "Wayfarer's Boots", "Weapon, +1, +2, or +3", "Weapon of Certain Death",
+        "Weird Tank", "Wings of Flying", "Woodcutter's Axe", "Wraps Of Unarmed Prowess", "Zephyr Armor"
+      ],
+      vrare: [
+      "Abracadabrus", "Absorbing Tattoo", "All-Purpose Tool", "Amethyst Lodestone", "Ammunition, +1, +2, or +3",
+      "Amulet of the Black Skull", "Amulet of the Devout", "Amulet of the Planes", "Animated Shield", "Antimagic Armor",
+      "Arcane Cannon", "Arcane Grimoire", "Arcane Propulsion Arm", "Armor, +1, +2, or +3", "Armor of Safeguarding",
+      "Arrow of Slaying", "Bag of Devouring", "Baleful Talon", "Barrier Tattoo", "Battle Standard of Infernal Power",
+      "Belt of Giant Strength", "Blade of the Medusa", "Blast Scepter", "Bloodaxe", "Bloodseeker Ammunition",
+      "Bloodshed Blade", "Bloodwell Vial", "Bobbing Lily Pad", "Bow Of Melodies", "Bracelet of Rock Magic",
+      "Candle of Invocation", "Cape of Enlargement", "Carpet of Flying", "Cauldron of Rebirth", "Chime of Exile",
+      "Chronolometer", "Cloak of Arachnida", "Clockwork Armor", "Conch of Teleportation", "Constantori's Portrait",
+      "Crown Of Whirling Comets", "Crystal Ball", "Crystalline Chronicle", "Dancing Sword", "Deck Of Dimensions",
+      "Deck Of Wild Cards", "Demon Armor", "Devastation Orb", "Dimensional Loop", "Dispelling Stone",
+      "Dragon Scale Mail", "Dragon Vessel", "Dragonhide Belt", "Dragon's Wrath Weapon", "Dragon-Touched Focus",
+      "Duskcrusher", "Dwarven Plate", "Dwarven Thrower", "Dyrrn's Tentacle Whip", "Efreeti Bottle",
+      "Eldritch Staff", "Far Gear", "Fate Cutter Shears", "Fate Dealer's Deck", "Figurine of Wondrous Power",
+      "Fish Suit", "Flying Citadel Helm", "Fool's Blade", "Forcebreaker Weapon", "Frost Brand",
+      "Ghost Step Tattoo", "Guild Keyrune", "Hammer of Runic Focus", "Helm of Brilliance", "Helm of Devil Command",
+      "Heward's Hireling Armor", "Horn of Valhalla", "Horned Ring", "Horseshoes of a Zephyr", "Hunter's Coat",
+      "Illusionist's Bracers", "Ingot of the Skold Rune", "Instrument of the Bards", "Ioun Stone", "Kyrzin's Ooze",
+      "Last Stand Armor", "Lifewell Tattoo", "Living Armor", "Lord's Ensemble", "Lucent Destroyer",
+      "Manual of Bodily Health", "Manual of Gainful Exercise", "Manual of Golems", "Manual of Quickness of Action", "Mindblasting Cap",
+      "Mindguard Crown", "Mirror of Life Trapping", "Mirror of Reflected Pasts", "Mistral Mantle", "Moon Sickle",
+      "Mudslick Tower", "Navigation Orb", "Nimbus Coronet", "Nine Lives Stealer", "Nolzur's Marvelous Pigments",
+      "Oathbow", "Oil of Sharpness", "Orb of the Veil", "Ornithopter of Flying", "Pennant of the Vind Rune",
+      "Peregrine Mask", "Polymorph Blade", "Potion of Flying", "Potion of Healing", "Potion of Invisibility",
+      "Potion of Longevity", "Potion of Mind Control", "Potion of Possibility", "Potion of Speed", "Potion of Vitality",
+      "Prehistoric Figurines of Wondrous Power", "Reincarnation Dust", "Rhythm Maker's Drum", "Ring of Amity", "Ring of Red Fury",
+      "Ring of Regeneration", "Ring of Shooting Stars", "Ring of Telekinesis", "Robe of Scintillating Colors", "Robe of Stars",
+      "Rod of Absorption", "Rod of Alertness", "Rod Of Hellish Flames", "Rod of Security", "Rod of the Pact Keeper, +1, +2, +3",
+      "Rotor of Return", "Ruidium Armor", "Ruidium Shield", "Ruidium Weapon", "Sage's Signet",
+      "Sanctum Amulet", "Sapphire Buckler", "Scaled Ornament", "Scimitar of Speed", "Shard of the Ise Rune",
+      "Shield, +1, +2, +3", "Shield of the Uven Rune", "Skull Helm", "Sling Bullets of Althemone", "Speaking Stone",
+      "Spear of Backbiting", "Spell Gem", "Spell Scroll", "Spellguard Shield", "Staff of Dunamancy",
+      "Staff of Fate", "Staff of Fire", "Staff of Frost", "Staff of Power", "Staff of Striking",
+      "Staff of Thunder and Lightning", "Steel", "Stonemaker War Pick", "Sword of Sharpness", "Sword of the Paruns",
+      "Tasha's Creeping Keepboat", "Thunderbuss", "Tidecaller Trident", "Timepiece of Travel", "Tome of Clear Thought",
+      "Tome of Leadership and Influence", "Tome of Understanding", "Voyager Staff", "Wand of Polymorph", "Wand of the War Mage",
+      "Watchful Helm", "Weapon, +1, +2, or +3", "Weapon of Throne's Command", "Wheel of Stars", "Wraps Of Unarmed Prowess",
+      "Wyrmreaver Gauntlets"
+      ],
+      legendary: [
+      "Apparatus of Kwalish", "Armor, +1, +2, or +3", "Armor of Invulnerability", "Azuredge", "Belashyrra's Beholder Crown",
+      "Belt of Giant Strength", "Black Crystal Tablet", "Blackrazor", "Blackstaff", "Blood Fury Tattoo",
+      "Bookmark", "Cloak of Invisibility", "Crystal Ball", "Cubic Gate", "Danoth's Visor",
+      "Dawnbringer", "Deck Of Many More Things", "Deck of Many Things", "Deck of Several Things", "Defender",
+      "Dragon Mask", "Dragon Vessel", "Dragonlance", "Dragon's Wrath Weapon", "Dragonstaff of Ahghairon",
+      "Dragon-Touched Focus", "Drown", "Efreeti Chain", "Euryale's Aegis", "Fane-Eater",
+      "Fate Dealer's Deck", "Figurine of Wondrous Power", "Flail of Tiamat", "Gloves of Soul Catching", "Grimoire Infinitus",
+      "Gurt's Greataxe", "Hammer of Thunderbolts", "Hammock of Worlds", "Harp of Gilded Plenty", "Hazirawn",
+      "Helm of Disjunction", "Helm of the Scavenger", "Heretic", "Hide of the Feral Guardian", "Hither-Thither Staff",
+      "Holy Avenger", "Holy Symbol of Ravenkind", "Horn of Beckoning Death", "Horn of Valhalla", "Icon of Ravenloft",
+      "Infernal Tack", "Infiltrator's Key", "Instrument of the Bards", "Ioun Stone", "Iron Flask",
+      "Ironfang", "Jester's Mask", "Jewel of Three Prayers", "Korolnor Scepter", "Longbow of the Healing Hearth",
+      "Lost Crown of Besilmer", "Luck Blade", "Luxon Beacon", "Matalotok", "Moonblade",
+      "Murgaxor's Orb", "Nepenthe", "Nether Scroll of Azumar", "Nightbringer", "Nightfall Pearl",
+      "Obsidian Flint Dragon Plate", "Orb of Skoraeus", "Orcsplitter", "Plate Armor of Etherealness", "Platinum Scarf",
+      "Potion of Dragon's Majesty", "Potion of Giant Size", "Potion of Giant Strength", "Powered Armor", "Prehistoric Figurines of Wondrous Power",
+      "Pyxis of Pandemonium", "Rakdos Riteknife", "Reaper's Scream", "Red Wizard Blade", "Ring of Djinni Summoning",
+      "Ring of Elemental Command", "Ring of Invisibility", "Ring of Spell Turning", "Ring of Three Wishes", "Robe of the Archmagi",
+      "Rod of Lordly Might", "Rod of Resurrection", "Ruby Weave Gem", "Ruinblade", "Scaled Ornament",
+      "Scarab of Protection", "Scroll of Tarrasque Summoning", "Scroll of the Comet", "Shard Solitaire", "Shield of the Blazing Dreadnought",
+      "Shield of the Hidden Lord", "Snicker-Snack", "Sovereign Glue", "Spell Bottle", "Spell Gem",
+      "Spell Scroll", "Sphere Of Annihilation", "Spindle Of Fate", "Staff of the Magi", "Stonebreaker's Breastplate",
+      "Stormgirdle", "Sunsword", "Sword of Answering", "Sword of the Planes", "Tablet of Reawakening",
+      "Talarith", "Talisman of Pure Good", "Talisman of the Sphere", "Talisman of Ultimate Evil", "Telescopic Transporter",
+      "Tinderstrike", "Tome of the Stilled Tongue", "Topaz Annihilator", "Universal Solvent", "Verminshroud",
+      "Vorpal Sword", "Wave", "Waythe", "Well of Many Worlds", "Whelm",
+      "Windvane", "Witchlight Vane", "Witchlight Watch", "Wreath of the Prism", "Ythryn Mythallar"
+      ]
+    };
+
+    function rollItemTier(tier = null) {
+      const tiers = Object.keys(itemTiers);
+      const selectedTier = tier ? tier.toLowerCase() : tiers[Math.floor(Math.random() * tiers.length)];
+      
+      if (!itemTiers[selectedTier]) {
+        showError(`Invalid tier. Available tiers: ${tiers.join(', ')}`);
+        return;
+      }
+      
+      const items = itemTiers[selectedTier];
+      const item = items[Math.floor(Math.random() * items.length)];
+      
+      // Convert item name to URL-friendly format, handling special cases
+      const itemUrl = item.toLowerCase()
+        .replace(/'/g, '')  // Remove apostrophes
+        .replace(/\+1, \+2, or \+3/g, '-1-2-3')  // Handle +1, +2, or +3
+        .replace(/\+1, \+2, \+3/g, '-1-2-3')  // Handle +1, +2, +3
+        .replace(/\+1, \+2/g, '-1-2')  // Handle +1, +2
+        .replace(/\+1 or \+2/g, '-1-2')  // Handle +1 or +2
+        .replace(/\+1/g, '-1')  // Handle +1
+        .replace(/\+2/g, '-2')  // Handle +2
+        .replace(/\+3/g, '-3')  // Handle +3
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      
+      const wikiUrl = `https://dnd5e.wikidot.com/wondrous-items:${itemUrl}`;
+      
+      addOutputLine(`<strong>${selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Item Rolled:</strong> <a href="${wikiUrl}" target="_blank">${item}</a>`);
+    }
+
     function drawCard() {
       const deck = [
         { name: "Balance", effect: "Your alignment changes. Lawful becomes chaotic, good becomes evil, and vice versa." },
@@ -417,21 +916,34 @@
     };
 
     function processSpellInput(inputText) {
-      const spellMatch = inputText.match(/(\w+)(?:\s+(\d+)(?:th|st|nd|rd))?(.*)/i);
+      // First try to match the spell name without spaces
+      let spellMatch = inputText.match(/^(\w+)(?:\s+(\d+)(?:th|st|nd|rd))?(.*)/i);
+      
+      // If no match, try to match with spaces in the spell name
+      if (!spellMatch) {
+        spellMatch = inputText.match(/^([a-zA-Z\s]+)(?:\s+(\d+)(?:th|st|nd|rd))?(.*)/i);
+      }
+
       if (!spellMatch) return null;
 
-      const spellName = spellMatch[1].toLowerCase();
+      const spellName = spellMatch[1].toLowerCase().trim();
       const spellLevel = parseInt(spellMatch[2]) || null;
       const modifiers = spellMatch[3]?.trim() || "";
 
-      if (!spellDamage[spellName]) return null;
+      // Check if the spell exists in the spellDamage object
+      const spellKey = Object.keys(spellDamage).find(key => 
+        key.toLowerCase() === spellName || 
+        key.toLowerCase().replace(/\s+/g, '') === spellName.replace(/\s+/g, '')
+      );
+
+      if (!spellKey) return null;
 
       if (spellLevel && spellLevel > 9) {
         showError("Spell level cannot exceed 9th level.");
         return null;
       }
 
-      let baseDamage = spellDamage[spellName];
+      let baseDamage = spellDamage[spellKey];
 
       // Adjust damage for upcasting
       if (spellLevel) {
@@ -457,7 +969,7 @@
           spiritGuardians: 3,
           moonbeam: 2,
           sacredFlame: 0,
-        }[spellName] || 0;
+        }[spellKey] || 0;
 
         const extraDice = {
           fireball: "d6",
@@ -471,7 +983,7 @@
           guidingBolt: "d6",
           moonbeam: "d10",
           spiritGuardians: "d8",
-        }[spellName];
+        }[spellKey];
 
         if (extraDice && spellLevel > baseLevel) {
           const extraLevels = spellLevel - baseLevel;
@@ -507,6 +1019,47 @@
       if (inputText) {
         addOutputLine(inputText, 'command-echo');
       } else {
+        diceInput.value = '';
+        return;
+      }
+
+      // Handle bonus question answer if waiting for one
+      if (awaitingAnswer) {
+        checkAnswer(inputText);
+        diceInput.value = '';
+        return;
+      }
+
+      // Handle help command
+      if (inputText.toLowerCase() === 'help') {
+        showHelpModal();
+        diceInput.value = '';
+        return;
+      }
+
+      // Handle 8ball command
+      if (inputText.toLowerCase() === '8ball') {
+        askMagic8Ball();
+        diceInput.value = '';
+        return;
+      }
+
+      // Handle GWF mode toggle
+      if (inputText.toLowerCase() === 'gwf') {
+        gwfMode = !gwfMode;
+        addOutputLine(`Great Weapon Fighting mode ${gwfMode ? 'enabled' : 'disabled'}.`);
+        diceInput.value = '';
+        return;
+      }
+
+      // Handle bonus command
+      if (inputText.toLowerCase() === 'bonus') {
+        if (luckModifier !== 0) {
+          showError("You must use your current luck modifier before asking another question.");
+          diceInput.value = '';
+          return;
+        }
+        askBonusQuestion();
         diceInput.value = '';
         return;
       }
@@ -564,9 +1117,21 @@
         return;
       }
 
+      if (inputText.toLowerCase().startsWith('item')) {
+        const parts = inputText.split(' ');
+        if (parts.length === 1) {
+          rollItemTier();
+        } else if (parts.length === 2) {
+          rollItemTier(parts[1]);
+        } else {
+          showError("Invalid item command. Use 'item' or 'item <tier>'");
+        }
+        diceInput.value = '';
+        return;
+      }
+
       if (inputText.toLowerCase() === 'legend') {
-        const legendText = `
-        <div>--------------------------------------------------</div>
+        const legendText = `        <div>--------------------------------------------------</div>
         <div><strong>Dice Roll Commands:</strong></div>
         <div>--------------------------------------------------</div>
         <div><code>xDy</code> - Roll x dice with y sides (e.g., 3d6)</div>
@@ -580,6 +1145,8 @@
         <div><code>ddY</code> - Roll with disadvantage (e.g., dd20)</div>
         <div><code>adY + m</code> - Roll with advantage and add m (e.g., ad20 + 5)</div>
         <div><code>ddY * f</code> - Roll with disadvantage and multiply by f (e.g., dd20 * 2)</div>
+        <div><code>gwf</code> - Toggle Great Weapon Fighting mode (rerolls 1's and 2's on non-d20 dice)</div>
+        <div><code>bonus</code> - Answer a D&D trivia question for a luck bonus on your next d20 roll</div>
         <div>--------------------------------------------------</div>
         <div><strong>Examples:</strong></div>
         <div>--------------------------------------------------</div>
@@ -592,6 +1159,8 @@
         <div><code>5#2d6 + 3</code> - Roll 5 sets of 2d6+3</div>
         <div><code>ad20 + 5</code> - Roll d20 with advantage and add 5</div>
         <div><code>dd20 * 2</code> - Roll d20 with disadvantage and multiply by 2</div>
+        <div><code>gwf</code> - Enable/disable Great Weapon Fighting mode</div>
+        <div><code>bonus</code> - Try your luck with a D&D trivia question</div>
         <div>--------------------------------------------------</div>
         <div>Type 'clear' to clear the screen</div>
         <div>--------------------------------------------------</div>
@@ -626,11 +1195,38 @@
 
   </script>
 
+  <script>
+    // Add modal functionality
+    const helpModal = document.getElementById('helpModal');
+    const closeModal = document.querySelector('.close-modal');
 
+    function showHelpModal() {
+      helpModal.style.display = 'block';
+    }
+
+    function hideHelpModal() {
+      helpModal.style.display = 'none';
+    }
+
+    closeModal.addEventListener('click', hideHelpModal);
+    window.addEventListener('click', (event) => {
+      if (event.target === helpModal) {
+        hideHelpModal();
+      }
+    });
+
+    // Add keyboard support for closing modal
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && helpModal.style.display === 'block') {
+        hideHelpModal();
+      }
+    });
+  </script>
 
   <footer style="position: fixed; bottom: 0; left: 0; padding: 5px; font-size: 12px; width: 100%; text-align: left;">
     &copy; 2025 Dice Terminal | Yuriagucci
   </footer>
 </body>
 </html>
+
 
